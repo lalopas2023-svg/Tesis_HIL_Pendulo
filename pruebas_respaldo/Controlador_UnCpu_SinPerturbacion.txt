@@ -1,0 +1,148 @@
+// ============================================================
+// CONTROLADOR + PLANTA HIL (CORREGIDO Y ESTABILIZADO)
+// ============================================================
+
+#include "F28x_Project.h"
+
+// --- DEFINICIONES DE CONTROLADOR ---
+#define PI              3.14159265359f
+#define Ts              0.0001f          // CORREGIDO: 1ms = 0.001s
+#define inv_Ts          10000.0f
+#define K1              1.0f
+#define K2              0.15f
+#define ALPHA           0.1f
+#define U_MIN           -10.0f
+#define U_MAX           10.0f
+#define THETA_MIN       -1.570796f      // -PI/2
+#define THETA_MAX       1.570796f       // PI/2
+#define THETA_RANGE     (THETA_MAX - THETA_MIN)
+
+// --- DEFINICIONES DE PLANTA ---
+#define g               9.81f
+#define L               0.3f
+#define m               0.1f
+#define J               (m * L * L)
+#define invJ            (1.0f / J)
+#define gL              (g / L)
+
+// --- VARIABLES GLOBALES ---
+volatile float theta = 0.5f;           
+volatile float theta_dot = 0.0f;
+volatile float theta_prev = 0.0f;
+volatile float u = 0.0f;
+volatile float theta_measured = 0.0f;
+
+__interrupt void cpu_timer0_isr(void);
+
+void main(void) {
+    InitSysCtrl();
+    InitGpio();
+    DINT;
+    InitPieCtrl();
+    IER = 0x0000;
+    IFR = 0x0000;
+    InitPieVectTable();
+
+    // 2. CONFIGURACIÓN ADC
+    EALLOW;
+    AdcaRegs.ADCCTL1.bit.ADCPWDNZ = 1;
+    AdcaRegs.ADCCTL1.bit.INTPULSEPOS = 1;
+    EDIS;
+    DELAY_US(1000);
+    EALLOW;
+    AdcaRegs.ADCSOC0CTL.bit.CHSEL = 0;
+    AdcaRegs.ADCSOC0CTL.bit.ACQPS = 14;
+    AdcaRegs.ADCSOC0CTL.bit.TRIGSEL = 0;
+    AdcaRegs.ADCINTSEL1N2.bit.INT1SEL = 0;
+    AdcaRegs.ADCINTSEL1N2.bit.INT1E = 1;
+    EDIS;
+
+    // 3. CONFIGURACIÓN DAC
+    EALLOW;
+    
+    //Habilitar el reloj del periférico DAC-B (¡CRÍTICO!)
+    CpuSysRegs.PCLKCR16.bit.DAC_B = 1; 
+
+    // Configurar registros
+    DacbRegs.DACCTL.bit.DACREFSEL = 1;      // Usar referencia VREFHI (aprox 3.0V en la LaunchPad)
+    DacbRegs.DACCTL.bit.LOADMODE = 0;       // Cargar el valor inmediatamente
+    DacbRegs.DACOUTEN.bit.DACOUTEN = 1;     // Habilitar la salida física en el pin
+    
+    // Escribir valor de prueba (Mitad de rango)
+    DacbRegs.DACVALS.all = 2048;            
+    
+    EDIS;
+
+    //Esperar a que el hardware del DAC se encienda físicamente
+    DELAY_US(50);
+
+    // 4. CONFIGURACIÓN TIMER 0 (1ms)
+    InitCpuTimers();
+    ConfigCpuTimer(&CpuTimer0, 200, 100); // 200MHz, 1000us = 1ms
+
+    EALLOW;
+    PieVectTable.TIMER0_INT = &cpu_timer0_isr;
+    EDIS;
+
+    PieCtrlRegs.PIEIER1.bit.INTx7 = 1;
+    IER |= M_INT1;
+    EINT;
+    ERTM;
+    CpuTimer0Regs.TCR.bit.TSS = 0;
+
+    // ==========================================================
+    // BUCLE PRINCIPAL
+    // ==========================================================
+    for(;;) { 
+        // Forzamos el hardware a sacar 1.65V eternamente
+        //DacbRegs.DACVALS.all = 2048; 
+    }
+}
+
+__interrupt void cpu_timer0_isr(void) {
+    
+    // ----------------------------------------------------------
+    // ETAPA 1: LECTURA SENSOR (ADC)
+    // ----------------------------------------------------------
+    AdcaRegs.ADCSOCFRC1.bit.SOC0 = 1;
+    while(AdcaRegs.ADCINTFLG.bit.ADCINT1 == 0);
+    AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1;
+
+    uint16_t adc_raw = AdcaResultRegs.ADCRESULT0;
+    theta_measured = THETA_MIN + ((float)adc_raw / 4095.0f) * THETA_RANGE;
+
+    // ----------------------------------------------------------
+    // ETAPA 2: CONTROLADOR
+    // ----------------------------------------------------------
+    float theta_dot_meas = (theta_measured - theta_prev) / Ts;
+    u = -(K1 * theta_measured) - (K2 * theta_dot_meas);
+    
+    // Saturación de control (Anti-Windup simple)
+    if (u > U_MAX) u = U_MAX;
+    if (u < U_MIN) u = U_MIN;
+
+    theta_prev = theta_measured;
+
+    // ----------------------------------------------------------
+    // ETAPA 3: PLANTA (Simulación Matemática)
+    // ----------------------------------------------------------
+    float theta_dot_new = theta_dot + Ts * (gL * theta + invJ * u);
+    float theta_new = theta + Ts * theta_dot;
+    
+    // Saturación de estado (Evita el infinito)
+    if (theta_new > THETA_MAX) theta_new = THETA_MAX;
+    if (theta_new < THETA_MIN) theta_new = THETA_MIN;
+
+    theta = theta_new;
+    theta_dot = theta_dot_new;
+
+    // ----------------------------------------------------------
+    // ETAPA 4: DAC (Salida física)
+    // ----------------------------------------------------------
+    float theta_frac = (theta - THETA_MIN) / THETA_RANGE;
+    if(theta_frac < 0.0f) theta_frac = 0.0f;
+    if(theta_frac > 1.0f) theta_frac = 1.0f;
+    DacbRegs.DACVALS.all = (uint16_t)(theta_frac * 4095.0f);
+
+    PieCtrlRegs.PIEACK.all = PIEACK_GROUP1; 
+}

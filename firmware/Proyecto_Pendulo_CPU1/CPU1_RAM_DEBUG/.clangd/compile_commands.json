@@ -1,0 +1,62 @@
+[
+   {
+      "directory" : "C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/Proyecto_Pendulo_CPU1/CPU1_RAM_DEBUG",
+      "command"   : "clang++ -I\"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include\" -DCPU1",
+      "file"      : "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_CodeStartBranch.asm"
+   },
+   {
+      "directory" : "C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/Proyecto_Pendulo_CPU1/CPU1_RAM_DEBUG",
+      "command"   : "clang++ -I\"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include\" -DCPU1 -xc",
+      "file"      : "C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/Proyecto_Pendulo_CPU1/F2837xD_CpuTimers.c"
+   },
+   {
+      "directory" : "C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/Proyecto_Pendulo_CPU1/CPU1_RAM_DEBUG",
+      "command"   : "clang++ -I\"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include\" -DCPU1 -xc",
+      "file"      : "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_DefaultISR.c"
+   },
+   {
+      "directory" : "C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/Proyecto_Pendulo_CPU1/CPU1_RAM_DEBUG",
+      "command"   : "clang++ -I\"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include\" -DCPU1 -xc",
+      "file"      : "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/source/F2837xD_GlobalVariableDefs.c"
+   },
+   {
+      "directory" : "C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/Proyecto_Pendulo_CPU1/CPU1_RAM_DEBUG",
+      "command"   : "clang++ -I\"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include\" -DCPU1 -xc",
+      "file"      : "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_Gpio.c"
+   },
+   {
+      "directory" : "C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/Proyecto_Pendulo_CPU1/CPU1_RAM_DEBUG",
+      "command"   : "clang++ -I\"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include\" -DCPU1 -xc",
+      "file"      : "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_Ipc.c"
+   },
+   {
+      "directory" : "C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/Proyecto_Pendulo_CPU1/CPU1_RAM_DEBUG",
+      "command"   : "clang++ -I\"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include\" -DCPU1 -xc",
+      "file"      : "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_Ipc_Driver_Util.c"
+   },
+   {
+      "directory" : "C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/Proyecto_Pendulo_CPU1/CPU1_RAM_DEBUG",
+      "command"   : "clang++ -I\"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include\" -DCPU1 -xc",
+      "file"      : "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_PieCtrl.c"
+   },
+   {
+      "directory" : "C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/Proyecto_Pendulo_CPU1/CPU1_RAM_DEBUG",
+      "command"   : "clang++ -I\"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include\" -DCPU1 -xc",
+      "file"      : "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_PieVect.c"
+   },
+   {
+      "directory" : "C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/Proyecto_Pendulo_CPU1/CPU1_RAM_DEBUG",
+      "command"   : "clang++ -I\"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include\" -DCPU1 -xc",
+      "file"      : "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_SysCtrl.c"
+   },
+   {
+      "directory" : "C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/Proyecto_Pendulo_CPU1/CPU1_RAM_DEBUG",
+      "command"   : "clang++ -I\"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include\" -DCPU1",
+      "file"      : "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_usDelay.asm"
+   },
+   {
+      "directory" : "C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/Proyecto_Pendulo_CPU1/CPU1_RAM_DEBUG",
+      "command"   : "clang++ -I\"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include\" -I\"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include\" -DCPU1 -xc",
+      "file"      : "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/examples/dual/ipc_gpio_toggle/cpu01/ipc_gpio_toggle_cpu01.c"
+   }
+]

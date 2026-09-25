@@ -1,0 +1,8 @@
+# Code Composer Studio
+firmware/Debug/
+firmware/Release/
+*.out
+
+# Python y MATLAB
+__pycache__/
+*.asv

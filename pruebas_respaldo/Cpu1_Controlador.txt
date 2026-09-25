@@ -1,0 +1,96 @@
+// ============================================================
+// CONTROLADOR HIL (CPU1) - F28379D
+// ============================================================
+
+#include "F28x_Project.h"
+#include "F2837xD_Ipc_drivers.h"
+
+#define PI             3.14159265359f
+#define Ts             0.001f
+#define inv_Ts         1000.0f
+#define K1             0.0694f
+#define K2             0.063f
+#define U_MIN          -10.0f
+#define U_MAX          10.0f
+#define U_RANGE        (U_MAX - U_MIN)
+#define THETA_MIN      -PI/2
+#define THETA_MAX      PI/2
+#define THETA_RANGE    (THETA_MAX - THETA_MIN)
+
+volatile float theta = 0.0f;
+volatile float theta_dot_filt = 0.0f;
+volatile float theta_prev = 0.0f;
+volatile float u = 0.0f;
+
+__interrupt void cpu_timer0_isr(void);
+
+void main(void) {
+    InitSysCtrl();
+    InitGpio();
+
+    // ==========================================================
+    // NUEVO CÓDIGO: DESPERTAR AL CPU2
+    // ==========================================================
+    // Envía el comando IPC para que el CPU2 arranque desde la RAM
+    //IPCBootCPU2(C1C2_BROM_BOOTMODE_BOOT_FROM_RAM);
+    // ==========================================================
+
+    // CONFIGURACIÓN DEL ADC A (θ desde CPU2)
+    EALLOW;
+    AdcaRegs.ADCCTL1.bit.ADCPWDNZ = 1;
+    AdcaRegs.ADCCTL1.bit.INTPULSEPOS = 1;
+    EDIS;
+    EALLOW;
+    AdcaRegs.ADCSOC0CTL.bit.CHSEL = 0;
+    AdcaRegs.ADCSOC0CTL.bit.ACQPS = 9;
+    AdcaRegs.ADCSOC0CTL.bit.TRIGSEL = 0;
+    EDIS;
+
+    // CONFIGURACIÓN DEL DAC C (u hacia CPU2)
+    EALLOW;
+    GpioCtrlRegs.GPAMUX2.bit.GPIO19 = 1;   // DACOUTC
+
+    // --- CONFIGURACIÓN DE GPIO66 PARA CPU2 (DACOUTA) ---
+    GpioCtrlRegs.GPCMUX1.bit.GPIO66 = 3;   // DACOUTA (configurado por CPU1)
+    EDIS;
+
+    DaccRegs.DACCTL.all = 0x0400;          // Encender DAC C
+
+    // TIMER
+    InitCpuTimers();
+    ConfigCpuTimer(&CpuTimer0, 200, Ts * 1000000);
+    EALLOW;
+    PieVectTable.TIMER0_INT = &cpu_timer0_isr;
+    EDIS;
+    PieCtrlRegs.PIEIER1.bit.INTx7 = 1;
+    IER |= M_INT1;
+    CpuTimer0Regs.TCR.bit.TSS = 0;
+
+    for(;;) { }
+}
+
+__interrupt void cpu_timer0_isr(void) {
+    AdcaRegs.ADCSOCFLG1.bit.SOC0 = 1;
+    while(AdcaRegs.ADCINTFLG.bit.ADCINT1 == 0);
+    AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1;
+    uint16_t adc_theta = AdcaResultRegs.ADCRESULT0;
+
+    float theta_volt = (adc_theta / 4095.0f) * 3.3f;
+    theta = THETA_MIN + (theta_volt / 3.3f) * THETA_RANGE;
+
+    #define ALPHA 0.1f
+    float theta_dot_raw = (theta - theta_prev) * inv_Ts;
+    theta_dot_filt = (1 - ALPHA) * theta_dot_filt + ALPHA * theta_dot_raw;
+    theta_prev = theta;
+
+    u = -(K1 * theta + K2 * theta_dot_filt);
+
+    float u_frac = (u - U_MIN) / U_RANGE;
+    if(u_frac < 0) u_frac = 0;
+    if(u_frac > 1) u_frac = 1;
+    uint16_t u_dac = (uint16_t)(u_frac * 4095.0f);
+    DaccRegs.DACVALS.all = u_dac;
+
+    PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
+    CpuTimer0Regs.TCR.bit.TIF = 1;
+}

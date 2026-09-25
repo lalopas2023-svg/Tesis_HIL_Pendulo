@@ -1,0 +1,13 @@
+{
+  "folders": [
+    {
+      "path": "file:///c%3A/Users/epasc/workspace_ccstheia"
+    },
+    {
+      "path": ""
+    }
+  ],
+  "settings": {
+    "CCS.debug.serial.options.localEcho": true
+  }
+}
