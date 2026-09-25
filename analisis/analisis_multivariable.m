@@ -37,3 +37,5 @@ yline(10, 'r:', 'Saturación Max (+10)', 'LineWidth', 1.5);
 yline(-10, 'r:', 'Saturación Min (-10)', 'LineWidth', 1.5);
 ylabel('Control (u)', 'FontSize', 12, 'FontWeight', 'bold');
 xlabel('Tiempo determinista (s)', 'FontSize', 12, 'FontWeight', 'bold');
+% 
+% Ahora como veo que efectivamente se subió? O después de esto que sigue? Para poder compartirle el repositorio a mi director. 

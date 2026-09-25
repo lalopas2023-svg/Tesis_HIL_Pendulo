@@ -1,7 +1,10 @@
 # Code Composer Studio
-firmware/Debug/
-firmware/Release/
+*DEBUG/
+*Release/
 *.out
+*.obj
+*.map
+.clangd/
 
 # Python y MATLAB
 __pycache__/
