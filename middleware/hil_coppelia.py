@@ -8,7 +8,9 @@ PUERTO_COM = 'COM10'
 BAUD_RATE = 57600
 
 try:
-    ser = serial.Serial(PUERTO_COM, BAUD_RATE, timeout=0)
+    ser = serial.Serial(PUERTO_COM, BAUD_RATE, timeout=1)
+    ser.reset_input_buffer()   # descarta basura residual de Windows
+    time.sleep(0.2)            # deja que el DSP envíe su primera trama completa
     print(f"Conectado al DSP en {PUERTO_COM}")
 except Exception as e:
     print(f"Error al abrir el puerto: {e}")
@@ -29,6 +31,12 @@ stream_id_u = sim.addGraphStream(graph_handle, 'Control (u)', 'u', 0, [0, 0, 1])
 
 print("Iniciando simulación HIL...")
 sim.startSimulation()
+print("Descartando lecturas iniciales...")
+for _ in range(10):
+    if ser.in_waiting > 0:
+        ser.readline()
+time.sleep(0.1)
+print("Listo. Grabando...")
 
 # --- 3. BUCLE DE CONTROL EN TIEMPO REAL Y GUARDADO ---
 try:
@@ -44,34 +52,23 @@ try:
         
         while True:
             if ser.in_waiting > 0:
-                linea = ser.readline().decode('utf-8').strip()
+                linea = ser.readline().decode('utf-8', errors='ignore').strip()
                 
-                if linea:
+                if linea and linea.count(',') == 2:
                     try:
                         valores = linea.split(',')
-                        
                         if len(valores) == 3:
-                            # Des-escalar dividiendo entre 1000
                             pos_rad = int(valores[0]) / 1000.0
                             vel_rad_s = int(valores[1]) / 1000.0
                             u_control = int(valores[2]) / 1000.0
-                            
-                            # Inyección cinemática (mover el modelo 3D)
+
                             sim.setJointPosition(joint_handle, pos_rad)
-                            
-                            # NUEVO: Dibujar las tres variables en la gráfica flotante
                             sim.setGraphStreamValue(graph_handle, stream_id_pos, pos_rad)
-                            #sim.setGraphStreamValue(graph_handle, stream_id_vel, vel_rad_s)
                             sim.setGraphStreamValue(graph_handle, stream_id_u, u_control)
-                            
-                            # Escribir la fila completa en el CSV
+
                             escritor_csv.writerow([round(tiempo_simulado, 4), pos_rad, vel_rad_s, u_control])
-                            
-                            # Avanzar el tiempo exactamente 0.01s
                             tiempo_simulado += paso_tiempo
-                            
                     except ValueError:
-                        # Ignorar tramas corruptas sin detener la simulación
                         pass
 
 except KeyboardInterrupt:

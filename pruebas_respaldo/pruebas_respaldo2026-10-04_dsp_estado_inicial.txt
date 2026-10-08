@@ -1,0 +1,230 @@
+// ============================================================
+// CONTROLADOR + PLANTA HIL + PERTURBACIÓN (POTENCIÓMETRO) CORREGIDO
+// ============================================================
+
+#include "F28x_Project.h"
+#include <stdio.h>
+#include <string.h>
+
+// --- DEFINICIONES DE CONTROLADOR ---
+#define PI              3.14159265359f
+#define Ts              0.00001f        // 10 us   
+#define KP              5.0f            // Kp sintonizado experimentalmente
+#define KD              0.15f           // Kd sintonizado experimentalmente
+#define KI              2.0f            // Ganancia integral ajustada para rechazo de perturbación
+#define U_MIN           -10.0f
+#define U_MAX           10.0f
+#define THETA_MIN       -1.570796f      
+#define THETA_MAX       1.570796f       
+#define THETA_RANGE     (THETA_MAX - THETA_MIN)
+
+// --- DEFINICIONES DE PLANTA ---
+#define g               9.81f
+#define L               0.3f
+#define m               0.1f
+#define b               0.005f          // Coeficiente de fricción viscosa del pivote
+#define J               (m * L * L)
+#define invJ            (1.0f / J)
+#define gL              (g / L)
+
+// --- VARIABLES GLOBALES ---
+volatile float error_integral = 0.0f;
+volatile float theta = 0.0f;             
+volatile float theta_dot = 0.0f;
+volatile float theta_prev = 0.0f;
+volatile float u = 0.0f;
+volatile float theta_measured = 0.0f;
+volatile float theta_dot_filt = 0.0f;
+
+// --- VARIABLES PARA PERTURBACIÓN ---
+volatile uint16_t perturbacion_raw = 0;
+volatile float perturbacion = 0.0f; 
+volatile float perturbacion_filt = 0.0f; // Filtro para suavizar el ruido del potenciómetro
+#define PERTURBACION_MAX  0.5f  
+
+volatile int flag_enviar = 0;
+volatile int contador_serial = 0;
+char buffer_serial[50]; 
+
+__interrupt void cpu_timer0_isr(void);
+
+// --- FUNCIONES SERIALES (SCI-A) ---
+void InitSciaGpio_LaunchPad(void) {
+    EALLOW;
+    GpioCtrlRegs.GPBPUD.bit.GPIO43 = 0;   
+    GpioCtrlRegs.GPBQSEL1.bit.GPIO43 = 3; 
+    GpioCtrlRegs.GPBGMUX1.bit.GPIO43 = 3; 
+    GpioCtrlRegs.GPBMUX1.bit.GPIO43 = 3;  
+
+    GpioCtrlRegs.GPBPUD.bit.GPIO42 = 0;   
+    GpioCtrlRegs.GPBGMUX1.bit.GPIO42 = 3; 
+    GpioCtrlRegs.GPBMUX1.bit.GPIO42 = 3;  
+    EDIS;
+}
+
+void InitScia_Config(void) {
+    EALLOW;
+    CpuSysRegs.PCLKCR7.bit.SCI_A = 1; 
+    EDIS;
+
+    SciaRegs.SCICCR.all = 0x0007;   
+    SciaRegs.SCICTL1.all = 0x0003;  
+    SciaRegs.SCICTL2.all = 0x0003;
+    SciaRegs.SCIHBAUD.all = 0x0000;
+    SciaRegs.SCILBAUD.all = 53;     // 115200 baudios
+    SciaRegs.SCICTL1.all = 0x0023;  
+}
+
+void main(void) {
+    volatile long delay_i; 
+
+    InitSysCtrl();
+    InitGpio();
+    DINT;
+    InitPieCtrl();
+    IER = 0x0000;
+    IFR = 0x0000;
+    InitPieVectTable();
+
+    InitSciaGpio_LaunchPad();
+    InitScia_Config();
+
+    // ==========================================================
+    // CONFIGURACIÓN ADC (A0 para Theta, AA2 para Perturbación)
+    // ==========================================================
+    EALLOW;
+    CpuSysRegs.PCLKCR13.bit.ADC_A = 1; 
+    AdcaRegs.ADCCTL2.bit.PRESCALE = 6; 
+    AdcaRegs.ADCCTL1.bit.ADCPWDNZ = 1;
+    AdcaRegs.ADCCTL1.bit.INTPULSEPOS = 1;
+    EDIS;
+    
+    for(delay_i = 0; delay_i < 200000; delay_i++){}
+
+    EALLOW;
+    AdcaRegs.ADCSOC0CTL.bit.CHSEL = 0; // Pin 30 / AA0 (Theta)
+    AdcaRegs.ADCSOC0CTL.bit.ACQPS = 14;
+    AdcaRegs.ADCSOC0CTL.bit.TRIGSEL = 0;
+    
+    AdcaRegs.ADCSOC1CTL.bit.CHSEL = 2; // Pin 29 / AA2 (Perturbación)
+    AdcaRegs.ADCSOC1CTL.bit.ACQPS = 14;
+    AdcaRegs.ADCSOC1CTL.bit.TRIGSEL = 0;
+
+    AdcaRegs.ADCINTSEL1N2.bit.INT1SEL = 1; 
+    AdcaRegs.ADCINTSEL1N2.bit.INT1E = 1;
+    EDIS;
+
+    // ==========================================================
+    // CONFIGURACIÓN DAC (Salida en Pin 70 / AA1)
+    // ==========================================================
+    EALLOW;
+    CpuSysRegs.PCLKCR16.bit.DAC_B = 1; 
+    DacbRegs.DACCTL.bit.DACREFSEL = 1;      
+    DacbRegs.DACCTL.bit.LOADMODE = 0;       
+    DacbRegs.DACOUTEN.bit.DACOUTEN = 1;     
+    DacbRegs.DACVALS.all = 2048;            
+    EDIS;
+
+    for(delay_i = 0; delay_i < 10000; delay_i++){}
+
+    InitCpuTimers();
+    ConfigCpuTimer(&CpuTimer0, 200, 10); 
+
+    EALLOW;
+    PieVectTable.TIMER0_INT = &cpu_timer0_isr;
+    EDIS;
+
+    PieCtrlRegs.PIEIER1.bit.INTx7 = 1;
+    IER |= M_INT1;
+    EINT;
+    ERTM;
+    CpuTimer0Regs.TCR.bit.TSS = 0; 
+
+    for(;;) { 
+        if(flag_enviar == 1) {
+            // 1. Escalar las tres variables (multiplicamos por 1000 para enviar enteros)
+            int pos_scaled = (int)(theta * 1000.0f);
+            int vel_scaled = (int)(theta_dot_filt * 1000.0f); // Enviamos la velocidad filtrada
+            int u_scaled = (int)(u * 1000.0f);                // Acción de control (PID)
+
+            // 2. Construir la trama separada por comas (Ej: "1570,-450,2048\r\n")
+            char trama[50];
+            int len = sprintf(trama, "%d,%d,%d\r\n", pos_scaled, vel_scaled, u_scaled);
+
+            // 3. Enviar caracter por caracter al puerto serial
+            int i;
+            for(i = 0; i < len; i++) {
+                while (SciaRegs.SCICTL2.bit.TXRDY == 0) {} 
+                SciaRegs.SCITXBUF.all = trama[i];
+            }
+            
+            flag_enviar = 0;
+        }
+    }
+}
+
+__interrupt void cpu_timer0_isr(void) {
+    
+    AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; 
+    AdcaRegs.ADCSOCFRC1.all = 0x0003;      
+    
+    volatile int timeout = 1000;
+    while((AdcaRegs.ADCINTFLG.bit.ADCINT1 == 0) && (timeout > 0)) {
+        timeout--;
+    }
+    AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; 
+
+    // --- 1. LECTURA DE SENSORES Y ZONA MUERTA ---
+    uint16_t adc_raw = AdcaResultRegs.ADCRESULT0;
+    theta_measured = THETA_MIN + ((float)adc_raw / 4095.0f) * THETA_RANGE;
+
+    perturbacion_raw = AdcaResultRegs.ADCRESULT1;
+    
+    // Zona muerta para asegurar simetría absoluta en los extremos del potenciómetro
+    if (perturbacion_raw < 50)   perturbacion_raw = 0;
+    if (perturbacion_raw > 4045) perturbacion_raw = 4095;
+
+    perturbacion = (((float)perturbacion_raw / 4095.0f) * (2.0f * PERTURBACION_MAX)) - PERTURBACION_MAX;
+    
+    // Filtro pasabajos para la perturbación (elimina ruido eléctrico del potenciómetro)
+    perturbacion_filt = (0.90f * perturbacion_filt) + (0.10f * perturbacion);
+
+    // --- 2. CÁLCULO DE CONTROL (PID) ---
+    float error = 0.0f - theta_measured; 
+    
+    error_integral += error * Ts;
+    if (error_integral > 2.0f)  error_integral = 2.0f;
+    if (error_integral < -2.0f) error_integral = -2.0f;
+
+    float theta_dot_meas = (theta_measured - theta_prev) / Ts;
+    // Alpha = 0.98 (98% valor anterior, 2% valor nuevo)
+    theta_dot_filt = (0.98f * theta_dot_filt) + (0.02f * theta_dot_meas); // <-- CORREGIDO
+    u = (KP * error) - (KD * theta_dot_filt) + (KI * error_integral);
+    
+    if (u > U_MAX) u = U_MAX;
+    if (u < U_MIN) u = U_MIN;
+
+    theta_prev = theta_measured;
+
+    // --- 3. PLANTA HIL (EULER-CROMER PARA MAYOR ESTABILIDAD) ---
+    theta = theta + (theta_dot * Ts);
+    theta_dot = theta_dot + Ts * (gL * theta - (b * invJ * theta_dot) + invJ * (u + perturbacion_filt));
+    
+    if (theta > THETA_MAX) theta = THETA_MAX;
+    if (theta < THETA_MIN) theta = THETA_MIN;
+
+    // --- 4. SALIDA AL DAC ---
+    float theta_frac = (theta - THETA_MIN) / THETA_RANGE;
+    if(theta_frac < 0.0f) theta_frac = 0.0f;
+    if(theta_frac > 1.0f) theta_frac = 1.0f;
+    DacbRegs.DACVALS.all = (uint16_t)(theta_frac * 4095.0f);
+
+    // --- 5. BANDERA DE ENVÍO SERIAL ---
+    contador_serial++;
+    if(contador_serial >= 1000) { 
+        flag_enviar = 1;
+        contador_serial = 0;
+    }
+
+    PieCtrlRegs.PIEACK.all = PIEACK_GROUP1; 
+}
