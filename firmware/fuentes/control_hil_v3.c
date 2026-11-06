@@ -28,6 +28,8 @@
 //   [v3-11] Reloj: con el símbolo _LAUNCHXL_F28379D el SDK da SYSCLK=200 MHz; sin él,
 //          100 MHz (tu medición: LSPCLK=25 MHz y 50 tramas/s). LSPCLK_HZ se elige solo.
 //   [v3-12] DAC inicial = código de THETA_INIT (corrige el arranque falso de la derivada).
+//   [CLK-1/2] Sin el simbolo _LAUNCHXL_F28379D ya NO compila (#error) y, ademas, si en
+//          tiempo de ejecucion SYSCLK != 200 MHz el programa se detiene (clock_ok = 0).
 //   [v3-9] Retardos con DELAY_US() en lugar de bucles vacíos (el compilador
 //          puede eliminar un bucle vacío y el tiempo cambia con la optimización).
 //
@@ -62,14 +64,17 @@
 //     SYSCLK = 200 MHz y LSPCLK = SYSCLK/4 = 50 MHz.
 //   - SIN ese símbolo el SDK usa PLL para otro cristal: SYSCLK = 100 MHz,
 //     LSPCLK = 25 MHz (es lo que mediste) y el Timer0 va a la mitad de velocidad.
-#ifdef _LAUNCHXL_F28379D
-  #define LSPCLK_HZ      50000000UL
-#else
-  #warning "Falta _LAUNCHXL_F28379D en Predefined Symbols: el reloj podria quedar en 100 MHz (verifica sysclk_mhz_reg en Watch)"
-  #define LSPCLK_HZ      25000000UL
+// [CLK-1] Si falta el simbolo _LAUNCHXL_F28379D el proyecto NO COMPILA. Antes solo habia un
+//         #warning y la tarjeta arrancaba a 100 MHz sin que nadie lo notara. Este simbolo no
+//         lo usa este archivo sino F2837xD_SysCtrl.c (InitSysCtrl): con el simbolo configura
+//         el PLL a 200 MHz; sin el, a 100 MHz. Por eso se exige a nivel de PROYECTO.
+#ifndef _LAUNCHXL_F28379D
+  #error "Falta _LAUNCHXL_F28379D. Agregalo en Project > Properties > Build > C2000 Compiler > Predefined Symbols, en TODAS las configuraciones (CPU1_RAM_DEBUG, CPU1_FLASH_DEBUG, ...), y haz Clean Project. Sin el, SYSCLK=100 MHz y el HIL no funciona."
 #endif
+#define SYSCLK_MHZ       200.0f     // reloj que EXIGE el diseno (Ts = 10 us = 2000 ciclos)
+#define LSPCLK_HZ        50000000UL // SYSCLK/4
 #define BAUD             115200UL
-#define BRR_VAL          ((LSPCLK_HZ + 4UL * BAUD) / (8UL * BAUD) - 1UL)   // = 26 (25 MHz) o 53 (50 MHz)
+#define BRR_VAL          ((LSPCLK_HZ + 4UL * BAUD) / (8UL * BAUD) - 1UL)   // = 53 con LSPCLK = 50 MHz
 
 // ============================ PARÁMETROS (igual que antes) ==================
 #define THETA_INIT      0.1f            // condición inicial (rad)
@@ -109,6 +114,8 @@ volatile int   primera_vez = 1;         // [v3-5]
 volatile Uint16 dac_code = 2048;        // último código escrito al DAC
 volatile int   start_flag = 0;          // [v3-8] 1 = ya arrancó (también se puede poner a mano en Watch)
 volatile Uint32 rx_errors = 0;          // [v3-8] errores de recepción SCI (informativo)
+volatile Uint16 clock_ok = 0;                 // [CLK-2] 1 = SYSCLK leido de los registros = 200 MHz
+volatile Uint32 error_reloj = 0;                // [CLK-2] crece solo si el reloj es incorrecto (programa detenido)
 volatile float  sysclk_mhz_reg = 0.0f;  // [DIAG] SYSCLK leído de los registros (supone cristal de 10 MHz)
 volatile float  lspclk_mhz_reg = 0.0f;  // [DIAG] LSPCLK leído de los registros
 volatile Uint32 main_iter = 0;          // [DIAG] vueltas del bucle principal (debe crecer)
@@ -252,6 +259,15 @@ void main(void)
         lspclk_mhz_reg = sys / (lsp ? 2.0f * (float)lsp : 1.0f);
     }
 
+    // [CLK-2] Guarda en tiempo de ejecucion: si el reloj no es 200 MHz, NO se arranca nada.
+    //         (cubre casos que el #error no ve: otro cristal, PLL mal configurado, etc.)
+    //         El programa queda detenido aqui; Python no recibira "OK" y avisara.
+    clock_ok = (sysclk_mhz_reg > (SYSCLK_MHZ - 1.0f) && sysclk_mhz_reg < (SYSCLK_MHZ + 1.0f)) ? 1 : 0;
+    if (!clock_ok) {
+        DINT;
+        for (;;) { error_reloj++; }
+    }
+
     InitGpio();
     DINT;
     InitPieCtrl();
@@ -295,7 +311,7 @@ void main(void)
 
     // ---------------------- Timer 0: ISR cada 10 us -------------------------
     InitCpuTimers();
-    ConfigCpuTimer(&CpuTimer0, 200, 10);    // 200 MHz, 10 us = 2000 ciclos
+    ConfigCpuTimer(&CpuTimer0, SYSCLK_MHZ, 10);    // 200 MHz, 10 us = 2000 ciclos
 
     EALLOW;
     PieVectTable.TIMER0_INT = &cpu_timer0_isr;

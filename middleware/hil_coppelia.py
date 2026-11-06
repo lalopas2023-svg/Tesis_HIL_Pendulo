@@ -33,10 +33,16 @@ PUERTO_COM = 'COM10'
 BAUD_RATE = 115200          # el firmware v3 da 115 741 baud reales (+0.47 %)
 DURACION_S = 20.0           # segundos de datos a grabar; None = hasta Ctrl+C
 USAR_COPPELIA = '--sin-coppelia' not in sys.argv   # python script.py --sin-coppelia  = solo CSV
-COPPELIA_CADA = 1           # actualizar CoppeliaSim cada N líneas (sube si va lento)
+VIZ_HZ = 50.0               # veces por segundo que se mueve el péndulo en CoppeliaSim
+GRAFICA_HZ = 25.0           # veces por segundo que se añaden puntos a la gráfica
+                            # (el CSV siempre se guarda completo, a 100 Hz)
 PASO_TIEMPO = 0.01          # el DSP manda una línea cada 10 ms
 INTENTOS_TRIGGER = 3        # veces que se reintenta enviar 'S'
 ESPERA_OK_S = 1.5           # segundos de espera de "OK" por intento
+# Comprobacion del reloj del DSP a partir de la tasa de tramas: a 200 MHz llegan 100
+# tramas/s; a 100 MHz (falta el simbolo _LAUNCHXL_F28379D) llegan 50.
+REVISAR_TASA_TRAS_S = 3.0   # segundos de datos antes de medir la tasa
+TASA_ESPERADA_HZ = 1.0 / PASO_TIEMPO
 
 CARPETA_SALIDA = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analisis'))
@@ -109,8 +115,7 @@ def hacer_trigger(ser, lector):
 def main():
     # Variables inicializadas ANTES de cualquier try (el finally las usa).
     ser = None
-    sim = None
-    client = None
+    visor = None
     archivo_csv = None
     ruta_csv = None
     lineas_validas = 0
@@ -123,6 +128,10 @@ def main():
     bytes_total = 0
     ultima_cruda = ''
     t_latido = 0.0
+    tasa_revisada = False
+    t_flush = 0.0
+    aviso_visor = False
+    corrida_invalida = False   # True = no copiar este CSV como 'ultimo' para MATLAB
 
     try:
         # --- Puerto serie ---------------------------------------------------
@@ -137,21 +146,18 @@ def main():
         lector = LectorLineas(ser)
         print(f"Conectado al DSP en {PUERTO_COM} a {BAUD_RATE} bps")
 
-        # --- CoppeliaSim ----------------------------------------------------
-        joint_handle = graph_handle = None
-        id_pos = id_vel = id_u = None
+        # --- CoppeliaSim (en un hilo aparte: nunca atrasa la lectura del DSP) ----
         if USAR_COPPELIA:
-            from coppeliasim_zmqremoteapi_client import RemoteAPIClient
+            from viz_coppelia import VisorCoppelia
             print("Conectando a CoppeliaSim...")
-            client = RemoteAPIClient()
-            sim = client.getObject('sim')
-            joint_handle = sim.getObject('/pendulum_joint')
-            graph_handle = sim.getObject('/graph')
-            id_pos = sim.addGraphStream(graph_handle, 'Posicion (rad)', 'rad', 0, [1, 0, 0])
-            id_vel = sim.addGraphStream(graph_handle, 'Velocidad (rad/s)', 'rad/s', 0, [0, 1, 0])
-            id_u = sim.addGraphStream(graph_handle, 'Control (u)', 'u', 0, [0, 0, 1])
-            print("Iniciando simulación...")
-            sim.startSimulation()
+            visor = VisorCoppelia(con_perturbacion=False, viz_hz=VIZ_HZ, grafica_hz=GRAFICA_HZ)
+            visor.start()
+            if not visor.listo.wait(30.0) or visor.error is not None:
+                print(f"Error al conectar con CoppeliaSim: {visor.error}")
+                print("¿Está abierto CoppeliaSim con la escena (/pendulum_joint y /graph)?")
+                visor = None
+                return 1
+            print("Simulación iniciada.")
 
         # --- Trigger --------------------------------------------------------
         ok, primera = hacer_trigger(ser, lector)
@@ -159,6 +165,9 @@ def main():
             print("ERROR: el DSP no respondió a la 'S'. No se graba nada.")
             print("Revisa: ¿CCS está en Resume con USE_TRIGGER = 1? ¿Se reinició el")
             print("programa desde el último arranque? ¿Baud/puerto correctos?")
+            print("Si el programa de CCS se detuvo por reloj incorrecto, en Watch verás")
+            print("clock_ok = 0 (SYSCLK distinto de 200 MHz): revisa el símbolo")
+            print("_LAUNCHXL_F28379D en las propiedades del proyecto.")
             return 2
 
         # --- Archivo de salida ---------------------------------------------
@@ -188,6 +197,7 @@ def main():
                 linea = lector.linea(0.5)    # espera hasta 0.5 s: no gasta CPU
                 max_pendiente = max(max_pendiente, ser.in_waiting)
             bytes_total = lector.bytes_total
+            t_llegada = time.time()
             if linea:
                 ultima_cruda = linea
             # Latido cada 2 s: así sabes qué está pasando mientras corre.
@@ -210,16 +220,38 @@ def main():
             # Primero se GUARDA en el CSV; si CoppeliaSim se traba, los datos ya están.
             escritor.writerow([round(tiempo_simulado, 4), pos_rad, vel_rad_s,
                                u_control, round(time.time() - t_inicio, 4)])
-            archivo_csv.flush()
+            if t_llegada - t_flush >= 0.5:          # flush cada 0.5 s (no en cada fila: más rápido)
+                archivo_csv.flush()
+                t_flush = t_llegada
             tiempo_simulado += PASO_TIEMPO
             lineas_validas += 1
 
-            if USAR_COPPELIA and ((lineas_validas - 1) % COPPELIA_CADA == 0):
-                etapa = 'enviando datos a CoppeliaSim (si se queda aquí, CoppeliaSim se trabó)'
-                sim.setJointPosition(joint_handle, pos_rad)
-                sim.setGraphStreamValue(graph_handle, id_pos, pos_rad)
-                sim.setGraphStreamValue(graph_handle, id_vel, vel_rad_s)
-                sim.setGraphStreamValue(graph_handle, id_u, u_control)
+            # --- Comprobación del reloj del DSP (una sola vez, tras unos segundos) ---
+            if (not tasa_revisada and lineas_validas >= 20
+                    and time.time() - t_inicio >= REVISAR_TASA_TRAS_S):
+                tasa_revisada = True
+                tasa = lineas_validas / (time.time() - t_inicio)
+                if 0.45 * TASA_ESPERADA_HZ <= tasa <= 0.55 * TASA_ESPERADA_HZ:
+                    print(f"\n*** ERROR DE RELOJ: llegan {tasa:.0f} tramas/s en vez de "
+                          f"{TASA_ESPERADA_HZ:.0f}. El DSP está a 100 MHz (no a 200). ***")
+                    print("Causa más probable: falta el símbolo _LAUNCHXL_F28379D en las")
+                    print("propiedades del proyecto de CCS. Los datos NO son válidos: se detiene")
+                    print("la grabación y este CSV no se copiará para MATLAB.")
+                    corrida_invalida = True
+                    return 3
+                elif not (0.9 * TASA_ESPERADA_HZ <= tasa <= 1.1 * TASA_ESPERADA_HZ):
+                    print(f"AVISO: tasa de {tasa:.0f} tramas/s (esperadas "
+                          f"{TASA_ESPERADA_HZ:.0f}). Revisa la carga del PC "
+                          "y el reloj del DSP.")
+                else:
+                    print(f"Reloj del DSP correcto: {tasa:.0f} tramas/s.")
+
+            if visor is not None:
+                visor.publicar(pos_rad, vel_rad_s, u_control)   # no bloquea
+                if visor.error is not None and not aviso_visor:
+                    aviso_visor = True
+                    print(f"(aviso) CoppeliaSim dejó de responder: {visor.error}. "
+                          "Se sigue grabando el CSV sin visualización.")
 
     except KeyboardInterrupt:
         print(f"\nDeteniendo por el usuario. Estaba: {etapa}")
@@ -227,11 +259,9 @@ def main():
     finally:
         if archivo_csv is not None:
             archivo_csv.close()
-        if sim is not None:
-            try:
-                sim.stopSimulation()
-            except Exception as e:
-                print(f"(aviso) no se pudo detener CoppeliaSim: {e}")
+        if visor is not None:
+            visor.detener()
+            print(visor.resumen())
         if ser is not None:
             ser.close()
             print("Puerto COM liberado.")
@@ -245,10 +275,12 @@ def main():
             print(f"Máx. bytes acumulados en el buffer serie: {max_pendiente}")
             if abs(reloj - tiempo_simulado) > 0.05 * max(reloj, 1.0):
                 print("AVISO: el reloj y el conteo difieren más de 5 %. Si el reloj es "
-                      "mayor, se perdieron líneas o Python/CoppeliaSim va lento "
-                      "(sube COPPELIA_CADA o pon USAR_COPPELIA = False).")
+                      "mayor, el PC no alcanza a leer el puerto a tiempo (cierra programas pesados) "
+                      "o el DSP no va a 100 tramas/s.")
             print(f"Archivo: {ruta_csv}")
-            if COPIAR_COMO_ULTIMO:
+            if corrida_invalida:
+                print("CORRIDA INVÁLIDA (reloj incorrecto): no se copia para MATLAB.")
+            elif COPIAR_COMO_ULTIMO:
                 destino = os.path.join(CARPETA_SALIDA, NOMBRE_ULTIMO)
                 try:
                     shutil.copyfile(ruta_csv, destino)
