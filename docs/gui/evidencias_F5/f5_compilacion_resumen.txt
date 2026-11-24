@@ -1,0 +1,12 @@
+# Resumen de la compilación de F5 (ccs-serverc, CPU1_RAM_DEBUG, 2026-11-24 15:57)
+# Extraído de logs\f5_build.log (el registro completo queda en el equipo, fuera del repositorio)
+# Problem summary for project 'Proyecto_Pendulo_CPU1': 0 errors, 2 warnings
+   Warning: [/Proyecto_Pendulo_CPU1]: Project 'Proyecto_Pendulo_CPU1' has no explicit encoding set
+   Warning: ipc_gpio_toggle_cpu01.c [line 528]: #1-D: last line of file ends without a newline
+
+# --------------------------------------------------------------------------------
+# [Tue Nov 24 15:57:16 CST 2026]: CCS headless build complete - 0 out of 1 projects have errors
+
+
+main = firmware\fuentes\f5\control_hil_f5.c  SHA-256 B19D9A54A3EB6A62597451EFF10C4D4CA1C88EA60DDB6B4EC8D9C6A42604D575
+.out = 497708 bytes (la v2 de autocalibración: 495652 bytes)

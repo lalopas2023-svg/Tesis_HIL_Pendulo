@@ -1,0 +1,29 @@
+DSLite version 20.5.0.4063
+Configuring Debugger (may take a few minutes on first launch)...
+	Initializing Register Database...
+	Initializing: IcePick_C_0
+	Executing Startup Scripts: IcePick_C_0
+	Initializing: C28xx_CPU1
+	Executing Startup Scripts: C28xx_CPU1
+	Initializing: CPU1_CLA1
+	Executing Startup Scripts: CPU1_CLA1
+	Initializing: C28xx_CPU2
+	Executing Startup Scripts: C28xx_CPU2
+	Initializing: CPU2_CLA1
+	Executing Startup Scripts: CPU2_CLA1
+Connecting...
+GEL: C28xx_CPU1: GEL Output: 
+Memory Map Initialization Complete
+info: C28xx_CPU1: If erase/program (E/P) operation is being done on one core, the other core should not execute from shared-RAM (SR) as they are used for the E/P code. Also, CPU1 will be halted to determine SR ownership for the CPU which will run the Flash Plugin code, after which CPU1 will be set to run its application. User code execution from SR could commence after the selected flash banks are programmed.
+Loading Program: C:\Users\epasc\Documents\Eddy\Maestria\Tesis\Tesis_HIL\firmware\_factibilidad\proyecto\Proyecto_Pendulo_CPU1\CPU1_RAM_DEBUG\Proyecto_Pendulo_CPU1.out
+	Preparing ... 
+	.text: 0 of 4 at 0x0
+	.text: 0 of 8 at 0x123
+	.data: 0 of 100 at 0x128
+	.text: 0 of 7566 at 0x8000
+	.data: 0 of 950 at 0xa800: 60%
+	.text: 0 of 4096 at 0xb000: 67%
+	Finished: 67%
+	Setting PC to entry point.: 67%
+Running...
+Success

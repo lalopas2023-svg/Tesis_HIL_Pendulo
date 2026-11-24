@@ -411,6 +411,33 @@ Extensión de `ccs-server-cli` en Windows y uso con el IDE abierto; existencia d
 - **Alcance:** arranque 5 días después de la v2, tras reconectar el USB. **No se registró el tiempo exacto sin energía** (la tarjeta estaba desconectada al menos desde poco antes de las 13:49). No se capturó `Watch` (`cal_ok`, `cal_out`, `b_auto`) en esta sesión.
 - **Estado de la autocalibración v2:** 18 corridas dentro de ±0.4 mrad en tres arranques distintos (19/11 17:40, 19/11 17:49 tras 8 min desconectada, 24/11 tras reconexión). Cumple el criterio de aceptación propuesto salvo la captura de `Watch` de esta sesión. Su inclusión en el firmware de la tesis sigue pendiente de la decisión del director.
 
+### Adenda 2026-11-24 (2): F5, primera corrida en la tarjeta (16 de 17 criterios; falla la latencia)
+- **Cierra el pendiente de la adenda 2026-11-19 (12).** Entregado a la copia aislada: `control_hil_f5.c` como `main` (`firmware\_factibilidad\proyecto\Proyecto_Pendulo_CPU1\ipc_gpio_toggle_cpu01.c`, SHA-256 `B19D9A54...D575`, idéntico a `firmware\fuentes\f5\control_hil_f5.c`) y `f5_prueba.py` (SHA-256 `CE5BDD61...C4B6`, idéntico al del repositorio). El `.c` traía una fecha de modificación adelantada unas 4 h respecto al reloj del equipo; se le puso la hora actual (`LastWriteTime = Get-Date`), sin cambiar el contenido.
+- **Compilación** (15:56 y 15:57, `ccs-serverc`, `CPU1_RAM_DEBUG`, `-ccs.buildType full`; el comando se ejecutó dos veces por un error de tecleo en la línea siguiente, con el mismo resultado): código de salida 0, 0 errores, 2 advertencias (las de siempre: proyecto sin codificación explícita; última línea sin salto de línea, ahora la 528). `.out` de 497,708 bytes (la v2: 495,652).
+- **Carga:** `DSLite load -n 0` sobre `TMS320F28379D.ccxml`, código de salida 0 ("Running... Success").
+- **Resultado de `f5_prueba.py`** (4 fases de 10 s):
+
+| Criterio | Medido | |
+|---|---|---|
+| Tasa de tramas en A, B, C y D (100 ± 2 /s) | 100.0, 100.0, 100.0, 100.1 | PASA |
+| Líneas inválidas en cada fase | 0 | PASA |
+| B: respuestas a `D` a 10 Hz | 100 de 100 | PASA |
+| **B: latencia comando-respuesta (mediana < 10 ms, máxima < 25 ms)** | **mediana 11.4 ms, máxima 20.0 ms** | **FALLA** |
+| C: respuestas a `D` a 100 Hz | 999 de 1000 (una en vuelo al cerrar la fase) | PASA |
+| D: comandos `D` contados por el DSP frente a enviados | 1101 = 1101 | PASA |
+| D: bytes desconocidos contados frente a enviados | 9205 = 9205 | PASA |
+| E: `isr_max_cycles` (< 2000) | 1579 | PASA |
+| E: `isr_overruns`, `adc_timeouts`, `rx_errors` | 0, 0, 0 | PASA |
+
+  Último diagnóstico del DSP: `tx_frames` 4102, `cal_ok` 1, `B` = 5.136 LSB (`B_milli` 5136).
+- **Lectura.**
+  1. Lo que el firmware debía garantizar se cumple: de 10,306 bytes recibidos en 40 s (1101 `D` y 9205 desconocidos) no se perdió ninguno, no hubo errores de recepción, ninguna línea dañada, la tasa de tramas no cambió y la ISR no tuvo *overruns*. `isr_max_cycles` = 1579 es 1 ciclo por encima del máximo visto antes (1578; rango de la línea base 1378 a 1578); frente al límite de 2000 no es significativo, pero se anota.
+  2. **Alcance de la fase D:** se enviaron 9205 bytes en 10 s (≈ 920 bytes/s), el 46 % de los 2000 por segundo nominales (el bucle de Python no llegó a más). El resultado vale para esa carga; el margen hasta la saturación de la línea (≈ 11.5 kB/s a 115741 baudios) **no está medido**.
+  3. **Latencia.** Lo que aporta el DSP se puede acotar: el byte `D` tarda 0.09 ms; si llega durante una trama, espera como máximo el resto de esa trama (unos 20 bytes, 1.7 ms); la respuesta tiene 36 bytes (3.1 ms a 115741 baudios) y el bucle principal la empieza a enviar en cuanto termina la trama. Total del lado del DSP: 3.2 a 5 ms. Lo medido (11.4 / 20.0 ms) deja de 6 a 15 ms sin explicar, que deben venir del camino USB-serie del PC. **Hipótesis (sin verificar):** temporizador de latencia de 16 ms del chip FTDI de la sonda XDS100v2 (valor por omisión): el chip entrega los bytes al PC solo al juntar un paquete o al vencer ese temporizador, lo que suma entre 0 y 16 ms. Con ella se predicen mediana ≈ 11 a 12 ms y máxima ≈ 21 ms; se midió 11.4 y 20.0. Es una coincidencia, no una comprobación.
+  4. **El criterio no se cambia.** Se fijó antes de correr; F5 queda en FALLA hasta comprobar la hipótesis. Si se confirma, el resultado se reporta como latencia de extremo a extremo (DSP + USB) dependiente de esa configuración de Windows, no como defecto del firmware.
+- **Archivos:** `firmware/fuentes/f5/f5_diag_llegadas.py` (nuevo, con copia en `_factibilidad`; mide la cadencia y el tamaño de los bloques de bytes que llegan al PC, sin enviar `D`) y `docs/gui/evidencias_F5/` (salida de la corrida, resumen de compilación, carga).
+- **Siguiente:** (1) correr `f5_diag_llegadas.py` y leer el valor `LatencyTimer` del registro de Windows, sin cambiar nada; (2) si coincide con 16 ms, anotar el valor, ponerlo en 1 ms, recargar y repetir F5 tres veces; (3) concluir y actualizar la guía y los reportes de la GUI.
+
 ## Depuración del repositorio, 2026-11-24
 
 **Qué se pidió:** quitar lo que sobra para que se vea lo importante, revisar que todo sea coherente, retirar las pruebas que ya no tienen sentido, no publicar el documento de tesis y dejar bien explicadas las carpetas. Los commits los hace el usuario; esta entrada no cambia ningún resultado de laboratorio.

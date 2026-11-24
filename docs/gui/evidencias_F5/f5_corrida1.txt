@@ -1,0 +1,22 @@
+DSP arranco. Corriendo fases de 10 s...
+Ultimo diagnostico:  {'isr_max': 1579, 'overruns': 0, 'adc_to': 0, 'rx_err': 0, 'tx_frames': 4102, 'cal_ok': 1, 'B_milli': 5136, 'cmd_diag': 1101, 'cmd_unk': 9205}
+
+PASA   A base           tasa de tramas 100.0 /s (esperado 100 +-2)
+PASA   A base           lineas invalidas: 0 []
+PASA   B D 10 Hz        tasa de tramas 100.0 /s (esperado 100 +-2)
+PASA   B D 10 Hz        lineas invalidas: 0 []
+PASA   C D 100 Hz       tasa de tramas 100.0 /s (esperado 100 +-2)
+PASA   C D 100 Hz       lineas invalidas: 0 []
+PASA   D basura 2 kHz   tasa de tramas 100.1 /s (esperado 100 +-2)
+PASA   D basura 2 kHz   lineas invalidas: 0 []
+PASA   B: respuestas 100 de 100 D enviadas (se tolera 1 en vuelo al cerrar la fase)
+FALLA  B: latencia mediana 11.4 ms, maxima 20.0 ms (limites 10 / 25)
+PASA   C: 999 respuestas a 1000 D (se agrupan si llegan varias antes de contestar)
+PASA   D: comandos D contados por el DSP 1101, enviados 1101 (ninguno perdido)
+PASA   D: bytes desconocidos contados 9205, enviados 9205
+PASA   E: isr_max_cycles 1579 (< 2000)
+PASA   E: isr_overruns 0
+PASA   E: adc_timeouts 0
+PASA   E: rx_errors 0
+
+RESULTADO F5: FALLA
