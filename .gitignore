@@ -1,11 +1,30 @@
-# Code Composer Studio
+# --- Code Composer Studio: salidas de compilación y archivos del IDE ---
 *DEBUG/
 *Release/
 *.out
 *.obj
 *.map
+.clangd
 .clangd/
+.theia/
+*.theia-workspace
+.settings/
 
-# Python y MATLAB
+# --- Python y MATLAB ---
 __pycache__/
+*.pyc
 *.asv
+
+# --- Datos que genera el middleware en cada corrida (no se versionan) ---
+# Cada corrida se guarda con fecha y hora; la última también se copia sin fecha.
+# Los CSV que respaldan un resultado de la bitácora sí se versionan (están en analisis/).
+analisis/datos_sin_perturbacion_20[0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9].csv
+analisis/datos_con_perturbacion_20[0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9].csv
+analisis/datos_sin_perturbacion.csv
+analisis/datos_con_perturbacion.csv
+
+# --- Copia de trabajo de las pruebas de factibilidad (binarios, registros, espacio de CCS) ---
+firmware/_factibilidad/
+
+# --- Material privado: no se publica (documento de tesis y su bitácora) ---
+privado/

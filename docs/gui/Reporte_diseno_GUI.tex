@@ -1,0 +1,545 @@
+\documentclass[12pt,letterpaper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs,tabularx,array}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds,calc}
+\usepackage[hidelinks]{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{etoolbox}\AtBeginDocument{\shorthandoff{<>}}
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,frame=single,columns=fullflexible,keepspaces=true,showstringspaces=false}
+\newcommand{\pendiente}[1]{\textbf{[PENDIENTE: #1]}}
+\renewcommand{\arraystretch}{1.15}\emergencystretch=3em\def\UrlBreaks{\do\/\do\-\do\_\do\.\do\=\do\?}\Urlmuskip=0mu plus 2mu
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+\tikzset{
+  caja/.style={draw,rounded corners=2pt,align=center,font=\small,inner sep=4pt,text width=3.0cm,minimum height=1.1cm,fill=gray!8},
+  herr/.style={font=\footnotesize\itshape,align=center,text width=3.0cm},
+  flecha/.style={-{Stealth[length=2.2mm]},thick},
+  opc/.style={draw,dashed,rounded corners=2pt,align=center,font=\small,inner sep=4pt,text width=3.0cm,minimum height=1.1cm}
+}
+
+
+\begin{document}
+\thispagestyle{empty}
+\begin{center}
+\includegraphics[scale=0.6]{Imagenes/UTM.png}
+\end{center}
+
+\begin{Large}
+	\begin{center}
+		\textbf{UNIVERSIDAD TECNOLÓGICA DE LA MIXTECA}\\
+	\end{center}
+\end{Large}
+
+\begin{Large}
+	\newlength{\longTitulo}
+	\settowidth{\longTitulo}{\textbf{xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}}
+	\begin{center}
+		\rule{\longTitulo}{.15mm}
+		\vskip 0.5cm
+		{\textbf{Diseño de la interfaz gráfica de configuración, generación y operación de la plataforma HIL modular}}\\
+        \vskip 0.3cm
+        {\large Reporte de diseño y justificación de decisiones\\ Borrador 0.2 para revisión del director}\\
+        \vskip 0.05cm
+		\rule{\longTitulo}{.15mm}\\
+	\end{center}
+\end{Large}
+
+\begin{center}
+	{\normalsize Proyecto de tesis: ``Desarrollo de una plataforma modular \textit{Hardware in the Loop} (HIL) para la emulación de sistemas de control''}
+\end{center}
+\vfill
+
+\begin{center}{
+ \textbf{Para obtener el grado de:}\\\vspace{0.2cm}
+        {Maestría en Robótica}\vspace{0.2cm}\\}
+\end{center}
+
+\begin{center}{
+    \textbf{Presenta:}\\\vspace{0.2cm}
+    {Ing. Eduardo Pascual Pérez}\vspace{0.2cm}\\}
+\end{center}
+
+\begin{center}
+    {\textbf{Director:}\\\vspace{0.2cm}
+    Dr. Fermín Hugo Ramírez Leyva\vspace{0.2cm}\\}
+\end{center}
+
+\begin{center}
+    {\textbf{Codirector:}\\\vspace{0.2cm}
+   M.C. Felipe Santiago Espinosa\vspace{0.2cm}\\}
+\end{center}
+
+\begin{center}
+    \vspace{0.4cm}
+	{Huajuapan de León, Oaxaca a \text{\today}}
+\end{center}
+\clearpage
+
+
+\tableofcontents\clearpage
+
+\section{Propósito y estado del documento}
+
+Este reporte responde a la observación del director de tesis de que, dado el enfoque escolar del proyecto, la interfaz de usuario debe facilitar todo el proceso de pruebas y no limitarse a entregar un archivo comprimido con el código. El objetivo es dejar por escrito qué se va a construir, con qué tecnologías y por qué, de modo que el director pueda aprobar, modificar o rechazar cada decisión antes de que se incorpore al capítulo de diseño de la tesis.
+
+\paragraph{Convenciones.} Las afirmaciones sobre herramientas de terceros se apoyan en su documentación oficial, citada al final. Lo que depende del equipo concreto (versiones, rutas, comportamiento real) se marca como \pendiente{...}; son comprobaciones que se proponen como pruebas de factibilidad en la Sección~\ref{sec:factibilidad}. Ninguna cifra de tiempo ahorrado se afirma sin medirla.
+
+\paragraph{Entorno de referencia.} Code Composer Studio 20.5.1, Windows 11, tarjeta LAUNCHXL-F28379D, Python y CoppeliaSim.
+
+\paragraph{Cambios respecto a la versión 0.1.} Se incorporan las decisiones posteriores a la primera revisión: alcance B confirmado; apertura de CoppeliaSim solo en los modelos que la requieren; organización de la interfaz en una pestaña por modelo más una pestaña para modelos nuevos; tres valores preestablecidos de periodo de muestreo; parámetros físicos editables en los modelos fijos; y previsión de una caja con periféricos de conexión fija. El detalle de la configuración de modelos y del hardware se desarrolla en el reporte \textit{Configuración de modelos desde la interfaz gráfica}, complementario a este.
+
+\section{El problema: un proceso de pruebas laborioso}
+\label{sec:problema}
+
+Hoy, para ejecutar una prueba hay que recorrer tres entornos independientes:
+\begin{enumerate}
+    \item \textbf{CCS.} Abrir el proyecto, ajustar los parámetros en el código fuente, compilar, entrar en la sesión de depuración, cargar el programa y ponerlo en ejecución. Es una secuencia larga y propensa a errores (por ejemplo, olvidar el símbolo de reloj a nivel de proyecto).
+    \item \textbf{Python.} Abrir una terminal, localizar el puerto COM correcto, ajustar la configuración del \textit{middleware} y ejecutarlo.
+    \item \textbf{CoppeliaSim.} Abrir el programa, cargar la escena y dejarla lista antes de que lleguen los datos.
+\end{enumerate}
+Cada cambio de un parámetro del controlador repite el ciclo completo. Para un investigador que conoce el sistema esto es incómodo; para un estudiante que usa la plataforma por primera vez, el costo de configuración compite con el tiempo que debería dedicar a lo que realmente le interesa, que es el comportamiento del lazo de control.
+
+\paragraph{Criterio de éxito.} La GUI será exitosa si un estudiante puede pasar de ``plataforma instalada'' a ``primera prueba corriendo'' sin abrir CCS, sin editar código y sin escribir comandos, y si puede ajustar parámetros del controlador durante la prueba sin recompilar. Esto es medible (Sección~\ref{sec:validacion}).
+
+\section{Requisitos de la interfaz}
+\label{sec:requisitos}
+
+\begin{table}[!htbp]
+\centering
+\caption{Requisitos de la interfaz (RG) y su origen.}
+\label{tab:rg}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{1.1cm}Y>{\raggedright\arraybackslash}p{4.0cm}}
+\toprule
+\textbf{ID} & \textbf{Requisito} & \textbf{Origen} \\
+\midrule
+RG1 & Un solo punto de entrada: configurar, generar, compilar, cargar, ejecutar y monitorear sin cambiar de aplicación. & Observación del director \\
+RG2 & Configuración sin editar código: la planta, el controlador y la telemetría se describen en formularios, y la GUI genera el código en C. & Objetivo específico 2 \\
+RG3 & Ajuste en línea de parámetros del controlador y de la perturbación sin recompilar ni recargar. & Enfoque didáctico \\
+RG4 & Gráficas y registro (CSV) integrados, con el mismo formato que usa el análisis posterior. & Reproducibilidad \\
+RG5 & Apertura y control automático de CoppeliaSim \emph{solo} en los modelos que lo requieren. & Indicación de diseño \\
+RG6 & Detección y aviso de errores de configuración frecuentes (reloj, puerto, herramienta no encontrada) con mensajes comprensibles. & Lecciones del incremento 1 \\
+RG7 & Primera ejecución guiada: detectar las herramientas instaladas y pedir solo lo que no pueda detectar. & Usuario novato \\
+RG8 & El código generado es legible y está documentado, de modo que el estudiante pueda abrirlo, entenderlo y modificarlo. & Enfoque escolar \\
+RG9 & Funcionar en Windows 11 con CCS 20.x sin software de pago adicional. & Entorno del laboratorio \\
+RG10 & Arquitectura extensible: añadir una planta nueva no debe exigir modificar la interfaz. & Objetivos 3 y 4 \\
+RG11 & Una pestaña por modelo (péndulo, robot, motor de CD) y una pestaña para agregar modelos nuevos; los modelos aún no definidos se anticipan como pestañas ``en definición''. & Indicación de diseño \\
+RG12 & Parámetros del controlador (ganancias de PID y vector de realimentación de estados) y periodo de muestreo (tres valores preestablecidos) configurables por el usuario. & Indicación de diseño \\
+RG13 & Parámetros físicos del modelo (por ejemplo $L$, $m$, $b$) editables en los modelos fijos; en los modelos nuevos, el usuario decide cuáles son editables. & Indicación de diseño \\
+RG14 & Prever el uso de periféricos de conexión fija (potenciómetros, interruptores, botones) que el usuario activa desde la interfaz según el modelo. & Indicación de diseño \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Qué se puede automatizar: resultado de la investigación}
+\label{sec:alcance}
+
+Antes de decidir la arquitectura se investigó, en la documentación oficial, hasta dónde puede llegar el control desde una sola aplicación. La Tabla~\ref{tab:alcance} resume el resultado; las secciones siguientes lo detallan.
+
+\begin{table}[!htbp]
+\centering
+\caption{Alcance de la automatización por paso del proceso.}
+\label{tab:alcance}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.6cm}Y>{\raggedright\arraybackslash}p{2.8cm}}
+\toprule
+\textbf{Paso} & \textbf{Mecanismo disponible} & \textbf{Estado} \\
+\midrule
+Generar código & Plantillas (Jinja2) a partir de un archivo de configuración. & Diseño propio \\
+Compilar & \texttt{ccs-server-cli} con la aplicación \texttt{buildProject}. & Documentado; probar \\
+Cargar y ejecutar & \texttt{dslite} (incluido con CCS): modos \textit{flash} y \textit{load}, \texttt{-u} para ejecutar. & Documentado; probar \\
+Ajustar parámetros & Comandos por UART (propuesta) o escritura de memoria con DSS. & UART propuesto \\
+Telemetría y gráficas & Puerto serie y \textit{middleware} existente. & Ya implementado \\
+CoppeliaSim & Línea de comandos (\texttt{-h}, \texttt{-s}, \texttt{-f}) y API remota ZeroMQ. & Documentado; probar \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Generación de código}
+
+El generador transforma un archivo de configuración (YAML) en archivos en C mediante plantillas. Es la parte más controlable porque no depende de herramientas externas. Su justificación se desarrolla en la Sección~\ref{sec:dec_generador}.
+
+\subsection{Compilación sin abrir el entorno gráfico}
+
+CCS 20.x está basado en Theia y conserva una aplicación de línea de comandos, \texttt{ccs-server-cli}, ubicada en la carpeta \texttt{ccs/eclipse} de la instalación. La documentación de CCS 20.5.1 describe las aplicaciones \texttt{importProject} y \texttt{buildProject}; por ejemplo:
+\begin{lstlisting}
+ccs-server-cli -noSplash -workspace "C:/Users/user/workspace_ccstheia"
+  -application com.ti.ccs.apps.buildProject
+  -ccs.projects newProject -ccs.configuration Debug
+\end{lstlisting}
+Esto permite compilar el proyecto con \emph{la misma configuración} que usa el entorno gráfico (símbolos predefinidos, rutas de inclusión, archivo de enlace), lo cual es importante porque un error de configuración, como la omisión del símbolo del reloj, tuvo consecuencias graves en el incremento 1. \pendiente{confirmar la extensión del ejecutable en Windows y si puede ejecutarse mientras el IDE está abierto}
+
+\subsection{Carga y ejecución: qué es UniFlash y qué es \texttt{dslite}}
+\label{sec:uniflash}
+
+\textbf{UniFlash} es una herramienta independiente de Texas Instruments para programar la memoria de los microcontroladores sin usar un entorno de desarrollo completo. Tiene una interfaz gráfica y una de línea de comandos. El programa que realiza el trabajo en la línea de comandos se llama \textbf{\texttt{dslite}} (\textit{DSLite}).
+
+Lo importante para este proyecto es que \emph{no es necesario instalar UniFlash}: según TI, la misma utilidad \texttt{dslite} se incluye con CCS, en la carpeta \texttt{ccs/ccs\_base/DebugServer/bin} de la instalación. \pendiente{verificar que dslite.exe existe en esa ruta en CCS 20.5.1} La GUI invocaría ese ejecutable.
+
+La documentación de UniFlash describe la sintaxis general: \texttt{dslite flash -c <archivo.ccxml> [opciones] <imagen.out>}. Las opciones relevantes son:
+\begin{itemize}
+    \item \texttt{-c}: archivo de configuración del objetivo (\texttt{.ccxml}), obligatorio. Describe la tarjeta y la sonda de depuración. Se genera una vez desde CCS o desde UniFlash.
+    \item \texttt{-f} y \texttt{-v}: programar (\textit{flash}) y verificar.
+    \item \texttt{-u}: ejecutar el programa al terminar.
+    \item \texttt{-r}: aplicar un reinicio (la lista de reinicios disponibles se obtiene con \texttt{-R}).
+    \item \texttt{-N} y \texttt{-n}: listar y seleccionar el núcleo (en el F28379D, el índice 0 corresponde a CPU1).
+\end{itemize}
+Además de \textit{flash} existe el modo \textit{load}, que carga el programa en RAM. El programa devuelve un código de salida (0 si tuvo éxito), lo que permite a la GUI detectar fallas sin interpretar texto.
+
+\paragraph{Limitaciones encontradas.} UniFlash programa un solo núcleo a la vez. En un hilo del foro de TI, la programación de CPU2 por línea de comandos falló en versiones antiguas, y otro hilo sobre la carga a RAM en doble núcleo quedó sin resolver. Para el péndulo (un solo núcleo) esto no afecta, pero será un punto crítico en la etapa de dos núcleos; por eso se programa como prueba de factibilidad (Sección~\ref{sec:factibilidad}) antes de comprometerlo. También queda por decidir si el desarrollo usa RAM (carga más rápida, se pierde al apagar) o \textit{flash}; depende del modo de arranque de la tarjeta. \pendiente{definir y probar el modo de carga}
+
+\subsection{Ajuste de parámetros en línea}
+
+Hay dos caminos:
+\begin{enumerate}
+    \item \textbf{Escritura de memoria con \textit{Debug Server Scripting} (DSS).} C2000 admite acceso a memoria en tiempo real, de modo que un \textit{script} puede localizar una variable por su símbolo y escribirla mientras el programa corre. Sin embargo, la documentación de CCS 20.5.1 indica que DSS es una solución \emph{heredada} (\textit{legacy}) que será sustituida por el nuevo CCS Scripting; además exige mantener una sesión de depuración abierta.
+    \item \textbf{Comandos por UART.} El firmware recibe comandos de texto por el mismo enlace por el que envía la telemetría. Sólo requiere ampliar el análisis de comandos, que hoy reconoce únicamente el disparador \texttt{S}.
+\end{enumerate}
+La decisión se justifica en la Sección~\ref{sec:dec_parametros}.
+
+\subsection{CoppeliaSim}
+
+CoppeliaSim se puede iniciar desde la línea de comandos con opciones como \texttt{-h} (sin interfaz gráfica), \texttt{-s} (iniciar la simulación), \texttt{-f} (archivo de escena) y \texttt{-q} (cerrar al terminar). Además ofrece una API remota por ZeroMQ con un cliente en Python (\texttt{coppeliasim-zmqremoteapi-client}) que permite iniciar y detener la simulación y modificar su estado. El \textit{middleware} actual ya usa esta API. Lo que \emph{no} resulta práctico es incrustar la ventana 3D de CoppeliaSim dentro de otra aplicación; por eso se propone lanzarla y controlarla automáticamente, como ventana aparte, sólo cuando el modelo la requiere (RG5).
+
+\section{Alternativas de arquitectura consideradas}
+\label{sec:alternativas}
+
+\begin{table}[!htbp]
+\centering
+\caption{Alternativas de alcance de la GUI.}
+\label{tab:alt}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.5cm}YY}
+\toprule
+\textbf{Alternativa} & \textbf{Qué incluye} & \textbf{Valoración} \\
+\midrule
+A. Orquestador & Un botón ejecuta configurar, generar, compilar, cargar, abrir CoppeliaSim y arrancar el \textit{middleware}. & Elimina el salto entre programas, pero cada ajuste de parámetros sigue exigiendo recompilar. \\
+B. Orquestador con control en línea & A, más protocolo de comandos por UART, gráficas y registro integrados, y ajuste de parámetros sin recompilar. & Cubre los requisitos RG1 a RG10 con herramientas documentadas y estables. \textbf{Elegida.} \\
+C. Integración total & B, más lectura y escritura de variables por DSS y vista 3D propia. & Mayor costo y dependencia de una herramienta en proceso de reemplazo. Se deja como trabajo futuro. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Decisión.} Se elige la alternativa B, con la indicación de que la apertura de CoppeliaSim es un paso \emph{opcional por modelo} (RG5). La justificación de fondo es que B es la mínima que elimina los dos mayores costos para el estudiante (recompilar por cada ajuste y alternar entre programas) sin apoyarse en una herramienta declarada heredada por el fabricante.
+
+\section{Arquitectura propuesta}
+\label{sec:arquitectura}
+
+\subsection{Flujo de trabajo}
+
+La Figura~\ref{fig:flujo} muestra el flujo que la GUI ejecutaría con un solo botón. Cada etapa es una función independiente que devuelve éxito o error, lo que permite mostrar el avance, detenerse en el paso que falló y repetir solo ese paso.
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[node distance=7mm and 9mm]
+\node[caja] (conf) {1. Configurar\\planta y controlador};
+\node[caja,right=of conf] (gen) {2. Generar código C\\(plantillas)};
+\node[caja,right=of gen] (comp) {3. Compilar};
+\node[herr,below=1mm of conf] {archivo YAML};
+\node[herr,below=1mm of gen] {Jinja2};
+\node[herr,below=1mm of comp] {\texttt{ccs-server-cli}};
+\node[caja,below=14mm of comp] (carg) {4. Cargar\\y ejecutar};
+\node[caja,left=of carg] (arr) {5. Arrancar\\telemetría (\texttt{S})};
+\node[caja,left=of arr] (mon) {6. Monitorear\\y ajustar};
+\node[herr,below=1mm of carg] {\texttt{dslite}};
+\node[herr,above=1mm of arr] {UART};
+\node[herr,below=1mm of mon] {gráficas, CSV};
+\node[opc,below=14mm of arr] (cop) {Abrir CoppeliaSim\\(solo si el modelo lo requiere)};
+\draw[flecha] (conf) -- (gen);
+\draw[flecha] (gen) -- (comp);
+\draw[flecha] (comp) -- (carg);
+\draw[flecha] (carg) -- (arr);
+\draw[flecha] (arr) -- (mon);
+\draw[flecha,dashed] (cop) -- (arr);
+\end{tikzpicture}
+\caption{Flujo de trabajo que la GUI automatiza. Bajo cada etapa se indica la herramienta que la realiza.}
+\label{fig:flujo}
+\end{figure}
+
+\subsection{Estructura de procesos}
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[node distance=8mm and 10mm]
+\node[caja,text width=3.4cm] (gui) {Interfaz\\(hilo principal)};
+\node[caja,right=of gui,yshift=14mm] (orq) {Orquestador\\de herramientas};
+\node[caja,right=of gui] (ser) {Hilo del puerto\\serie};
+\node[caja,right=of gui,yshift=-14mm] (viz) {Hilo de\\visualización};
+\node[caja,right=of orq] (cli) {\texttt{ccs-server-cli},\\\texttt{dslite}};
+\node[caja,right=of ser] (dsp) {LAUNCHXL-\\F28379D};
+\node[opc,right=of viz] (cop) {CoppeliaSim\\(ZeroMQ)};
+\draw[flecha] (gui) -- (orq);
+\draw[flecha] (gui) -- (ser);
+\draw[flecha] (gui) -- (viz);
+\draw[flecha] (orq) -- (cli);
+\draw[flecha,<->] (ser) -- (dsp);
+\draw[flecha,dashed] (viz) -- (cop);
+\draw[flecha] (ser) -- (viz);
+\end{tikzpicture}
+\caption{Estructura de procesos e hilos. La interfaz nunca se bloquea: el trabajo pesado se hace en el orquestador y en hilos dedicados.}
+\label{fig:procesos}
+\end{figure}
+
+\subsection{Estructura de la interfaz}
+\label{sec:pantallas}
+
+La interfaz se organiza en una \textbf{pestaña por modelo}, más una pestaña para agregar modelos nuevos:
+\begin{enumerate}
+    \item \textbf{Péndulo invertido.} Única pestaña con pruebas realizadas; sirve de referencia para las demás.
+    \item \textbf{Robot} y \textbf{Motor de CD.} Pestañas ``en definición'': aún no se especifican sus modelos, por lo que la estructura las anticipa mediante una ficha de definición (variables de estado, entradas, salidas, parámetros y controlador) y no ofrecen operación hasta completarla.
+    \item \textbf{+ Nuevo modelo.} Asistente para describir una planta nueva que respete las capacidades de la tarjeta (niveles de definición en el reporte complementario).
+\end{enumerate}
+Dentro de cada pestaña de modelo se repiten las mismas secciones, para que el uso sea uniforme:
+\begin{itemize}
+    \item \textbf{Configuración.} Controlador (ganancias de PID y vector de realimentación de estados), periodo de muestreo (tres valores preestablecidos), perturbación si el modelo la admite y parámetros físicos editables, cada uno con unidades y límites.
+    \item \textbf{Compilar y cargar.} Botón único con el estado de cada etapa (Figura~\ref{fig:flujo}) y registro de la salida de las herramientas.
+    \item \textbf{Monitor.} Gráficas en tiempo real, ajuste en línea de los parámetros que lo permiten (Sección~\ref{sec:protocolo}), arranque, paro y reinicio del estado. Si el modelo lo requiere (clave \texttt{visualizacion.coppelia} del descriptor), se abre CoppeliaSim de forma automática.
+    \item \textbf{Registro y diagnóstico.} Archivos CSV de cada prueba con la configuración que los originó; reloj verificado, porcentaje de uso de la interrupción, \textit{overruns} y alarmas.
+\end{itemize}
+Los elementos globales, comunes a todas las pestañas, son la barra de estado (puerto, herramientas y tarjeta), el asistente de primera ejecución y la vista de recursos de hardware (Sección~\ref{sec:hw_prev}). El asistente detecta CCS, \texttt{dslite}, CoppeliaSim y los puertos COM, y solicita únicamente lo que no pueda encontrar (RG7).
+
+\paragraph{Ámbito de los parámetros.} Cada parámetro tiene un ámbito que determina cuándo puede cambiarse: \emph{en línea} (durante la ejecución, por UART), \emph{de sesión} (requiere reiniciar la prueba), \emph{de generación} (requiere regenerar y recargar el firmware, por ejemplo el periodo de muestreo) o \emph{bloqueado} (fijo por la tarjeta, por ejemplo los pines). La clasificación completa se presenta en el reporte complementario.
+
+\subsection{Hardware de apoyo}
+\label{sec:hw_prev}
+
+Se prevé una caja que aloje la tarjeta con salidas fijas, no configurables, y con periféricos conectados de forma permanente (potenciómetros, interruptores, botones, indicadores y puntos de prueba). El usuario decide desde la interfaz cuáles utilizar según el modelo, mediante un perfil de hardware (``conexión fija, uso configurable''). Su definición se pospone hasta contar con la estructura de la interfaz validada y al menos un segundo modelo fijo.
+
+\subsection{Modelo de datos: descriptor de planta}
+
+Cada planta se describe con un archivo que reúne lo que la GUI necesita saber, de modo que añadir una planta nueva no exija cambiar la interfaz (RG10). Un fragmento ilustrativo:
+\begin{lstlisting}
+planta: pendulo_invertido
+parametros:
+  - {nombre: L, valor: 0.3, unidad: m, min: 0.1, max: 1.0}
+controlador: pid
+telemetria: [pos_mrad, vel_mrad_s, u_milli]
+visualizacion:
+  coppelia: true
+  escena: pendulo.ttt
+\end{lstlisting}
+La clave \texttt{visualizacion.coppelia} es la que implementa la indicación de abrir CoppeliaSim solo en los modelos que lo requieren: para un modelo como el motor de CD, donde las gráficas bastan, vale \texttt{false} y la GUI no lanza el simulador.
+
+\section{Decisiones de diseño y su justificación}
+\label{sec:decisiones}
+
+\subsection{Lenguaje y biblioteca de la interfaz: Python con PySide6}
+\label{sec:dec_lenguaje}
+
+\paragraph{Criterios.} (1) Reutilizar el \textit{middleware} y el cliente de CoppeliaSim, que ya están en Python; (2) gráficas en tiempo real; (3) licencia compatible con la distribución a alumnos; (4) documentación y comunidad; (5) facilidad de empaquetado en Windows.
+
+\begin{table}[!htbp]
+\centering
+\caption{Comparación de opciones para la interfaz.}
+\label{tab:lenguaje}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.6cm}YY}
+\toprule
+\textbf{Opción} & \textbf{A favor} & \textbf{En contra} \\
+\midrule
+Python + PySide6 & Reutiliza el \textit{middleware}; Qt es el estándar en aplicaciones científicas; licencia LGPL; \texttt{QProcess} para lanzar herramientas; \texttt{pyqtgraph} para gráficas en vivo. & Dependencia pesada de Qt; empaquetado requiere cuidado. \\
+Python + PyQt & Misma API. & Licencia GPL (o comercial): complica la distribución. \\
+Python + Tkinter & Incluido con Python. & Gráficas en tiempo real limitadas; aspecto y controles básicos. \\
+Python + Dear PyGui & Muy buen rendimiento de gráficas. & Menor documentación y comunidad; modo inmediato menos adecuado para formularios. \\
+Web (Electron o navegador) & Interfaz moderna. & Exige un servidor local y dos lenguajes; más piezas que mantener. \\
+C\# / .NET & Interfaz nativa en Windows. & Obliga a reescribir el \textit{middleware} y la conexión con CoppeliaSim; pierde portabilidad. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Decisión.} Python con PySide6 y \texttt{pyqtgraph}. El argumento principal es la reutilización: el \textit{middleware}, el análisis y el cliente de CoppeliaSim están en Python, de modo que una GUI en otro lenguaje obligaría a mantener dos bases de código y un puente entre ellas. PySide6 se prefiere sobre PyQt por su licencia LGPL. Se descarta Tkinter porque las gráficas en tiempo real son un requisito central. \pendiente{confirmar la licencia vigente de PySide6 y de pyqtgraph para el uso previsto}
+
+\subsection{Compilación: \texttt{ccs-server-cli} sobre un proyecto plantilla fijo}
+\label{sec:dec_build}
+
+Existen dos rutas: invocar el compilador de TI y \textit{make} directamente, o usar \texttt{ccs-server-cli}. Se elige la segunda por tres razones:
+\begin{enumerate}
+    \item \textbf{Misma configuración que el IDE.} Los símbolos predefinidos, las rutas de inclusión, el archivo de enlace y las opciones del compilador viven en el proyecto de CCS. Replicarlos a mano en un \textit{makefile} duplica información y crea la posibilidad de que diverjan. El incidente del símbolo de reloj muestra el costo de una configuración que no coincide.
+    \item \textbf{Menos código frágil.} Reproducir las rutas de C2000Ware y del compilador exige conocer la estructura interna de la instalación.
+    \item \textbf{Es el mecanismo que TI documenta} para CCS 20.x.
+\end{enumerate}
+Para no generar archivos de proyecto de CCS (que son complejos y específicos de la versión), el generador \emph{solo escribe archivos fuente} en una carpeta del proyecto, y el proyecto de CCS es una plantilla fija, versionada, con toda la configuración ya hecha. Esto separa dos problemas: la configuración del compilador se hace una vez y a mano; lo que cambia con cada planta se genera. \pendiente{medir el tiempo de compilación por línea de comandos y compararlo con el del IDE}
+
+\subsection{Carga: \texttt{dslite} y no una sesión de depuración}
+\label{sec:dec_carga}
+
+\texttt{dslite} carga y ejecuta el programa con un comando, devuelve un código de salida y no requiere una sesión de depuración interactiva. Es la misma herramienta que usa UniFlash, viene con CCS y no exige instalar nada adicional (Sección~\ref{sec:uniflash}). Frente a la alternativa de controlar el depurador mediante DSS, tiene dos ventajas: no depende de una API declarada heredada y su interfaz es un solo comando, más fácil de envolver y de diagnosticar. Su limitación (un núcleo a la vez, problemas conocidos con CPU2) se aborda con una prueba de factibilidad específica antes de la etapa de dos núcleos.
+
+\subsection{Ajuste de parámetros: comandos por UART}
+\label{sec:dec_parametros}
+
+Se elige la UART sobre DSS por las siguientes razones:
+\begin{enumerate}
+    \item \textbf{Independencia de la herramienta.} Un comando por UART funciona igual con CCS 20.5.1 que con cualquier versión futura, y no depende de una API en proceso de reemplazo.
+    \item \textbf{No ocupa el depurador.} DSS exige una sesión de depuración abierta; la UART ya está abierta para la telemetría.
+    \item \textbf{Valida los datos.} El firmware puede verificar rango y formato antes de aplicar un valor, algo que una escritura directa en memoria no hace.
+    \item \textbf{Es coherente con el diseño existente}, que ya usa texto por UART con valores enteros.
+    \item \textbf{Es didáctico.} Un protocolo de texto es legible y el estudiante puede probarlo desde un terminal serie.
+\end{enumerate}
+El costo es ampliar el firmware: hay que recibir y analizar comandos. La Sección~\ref{sec:protocolo} propone cómo hacerlo sin afectar el lazo de tiempo real.
+
+\subsection{Generación de código por plantillas, no por modelado en bloques}
+\label{sec:dec_generador}
+
+La tesis se desarrolló deliberadamente en C y sin Simulink. Un generador por plantillas (Jinja2) es coherente con ese enfoque, produce código legible (RG8) y no requiere licencias de pago. A diferencia de un entorno de modelado en bloques, no se pretende que el usuario describa \emph{cualquier} sistema, sino configurar un conjunto acotado de plantas y controladores ya validados. Esa restricción es la que permite garantizar el tiempo de ejecución de la interrupción. Para el usuario que necesita algo fuera del catálogo, el código generado queda disponible para modificarse a mano.
+
+\subsection{Archivo de configuración: YAML}
+
+El archivo de configuración debe ser legible por una persona, versionable y editable sin la GUI. YAML cumple con esos requisitos y admite comentarios; JSON es más estricto pero no admite comentarios y es más incómodo de editar. La GUI y la línea de comandos usan el mismo archivo, lo que permite reproducir una prueba a partir de la configuración guardada con su registro (RG4).
+
+\subsection{Puerto serie: un único propietario}
+
+El puerto COM lo abre y lo usa un solo componente, el hilo del puerto serie. Éste reparte las tramas a los demás: la gráfica, el registro CSV y la visualización. Esto evita el conflicto, ya observado, de dos programas abriendo el mismo puerto, y reutiliza el patrón del \textit{middleware} actual (hilo lector y registro, con visualización a tasa menor donde la muestra más reciente prevalece).
+
+\subsection{CoppeliaSim: control por API remota, ventana aparte y opcional}
+
+Se usa la API ZeroMQ, que el \textit{middleware} ya emplea, para iniciar y detener la simulación. Se descarta incrustar la ventana 3D porque no es una función soportada y sería frágil. Se descarta también modificar el \textit{middleware} para que dependa de CoppeliaSim: el \textit{middleware} se mantiene separado y la GUI lo usa solo si el descriptor de planta lo indica (RG5). \pendiente{decidir si se lanza CoppeliaSim con interfaz gráfica o sin ella según el modelo, y la versión mínima requerida}
+
+\subsection{Empaquetado}
+
+Para que los alumnos no instalen Python ni dependencias, se propone empaquetar la GUI como ejecutable de Windows (por ejemplo con PyInstaller). CCS y CoppeliaSim se siguen instalando aparte, por su tamaño y licencias; la GUI solo necesita conocer sus rutas. \pendiente{evaluar el empaquetado y su compatibilidad con PySide6}
+
+\section{Protocolo de comandos propuesto}
+\label{sec:protocolo}
+
+El firmware actual solo reconoce el carácter \texttt{S}, al que responde \texttt{OK} una vez por arranque. Se propone ampliarlo de forma compatible hacia atrás, con estas reglas:
+\begin{itemize}
+    \item Los comandos son líneas de texto terminadas en salto de línea, con valores \emph{enteros} en milésimas (por ejemplo \texttt{W KP 5000} para $K_p=5$). Esto es coherente con la telemetría actual, que ya usa enteros, y evita depender de la conversión de números flotantes a texto, que es problemática en C28x por el tamaño de \texttt{int}.
+    \item Las respuestas comienzan con una letra (\texttt{OK}, \texttt{ERR}); las líneas de telemetría comienzan con un dígito o con el signo menos. El receptor distingue ambas sin ambigüedad en el mismo flujo.
+    \item El análisis de comandos se hace en el bucle principal, \emph{fuera} de la interrupción de 100~kHz. La recepción usa la FIFO del módulo serie, y los parámetros nuevos se aplican en un instante seguro entre ciclos para que la rutina nunca lea un valor a medio actualizar.
+    \item El firmware valida el rango antes de aplicar y responde \texttt{ERR} con un código si el valor no es admisible.
+    \item Se admite un campo de verificación opcional (suma de verificación) para detectar tramas corrompidas.
+\end{itemize}
+
+\begin{table}[!htbp]
+\centering
+\caption{Comandos propuestos (diseño, aún no implementado).}
+\label{tab:cmd}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.2cm}Y>{\raggedright\arraybackslash}p{3.4cm}}
+\toprule
+\textbf{Comando} & \textbf{Función} & \textbf{Respuesta} \\
+\midrule
+\texttt{S} & Iniciar la telemetría (existente). & \texttt{OK} \\
+\texttt{W <par> <valor>} & Escribir un parámetro (ganancias, referencia, perturbación). & \texttt{OK} o \texttt{ERR <código>} \\
+\texttt{R <par>} & Leer el valor actual de un parámetro. & \texttt{V <par> <valor>} \\
+\texttt{Z} & Reiniciar el estado de la planta. & \texttt{OK} \\
+\texttt{D} & Solicitar el diagnóstico (reloj, ciclos máximos, \textit{overruns}). & \texttt{D <campos>} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Riesgos y mitigaciones}
+\label{sec:riesgos}
+
+\begin{table}[!htbp]
+\centering
+\caption{Riesgos identificados.}
+\label{tab:riesgos}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.0cm}YY}
+\toprule
+\textbf{Riesgo} & \textbf{Impacto} & \textbf{Mitigación} \\
+\midrule
+\texttt{ccs-server-cli} no funciona como se espera con el proyecto existente o con el IDE abierto. & No se puede compilar desde la GUI. & Prueba F1; alternativa de compilación con el compilador de TI. \\
+\texttt{dslite} no carga correctamente con el \texttt{.ccxml} del laboratorio. & No se puede cargar desde la GUI. & Prueba F2; la GUI avisaría cómo cargar con CCS como respaldo. \\
+Carga de CPU2 por línea de comandos. & Afecta la etapa de dos núcleos. & Prueba F4 antes de comprometer esa etapa. \\
+La interrupción no admite el costo de recibir comandos. & Pérdida de tiempo real. & Análisis en el bucle principal; medir ciclos máximos con y sin comandos. \\
+Cambios de versión de CCS. & Rutas y comandos distintos. & Aislar las herramientas en un solo módulo y detectar la versión en el asistente. \\
+Complejidad de la GUI para el plazo de la tesis. & No se completa. & Etapas con criterios de aceptación; alcance B acotado. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Pruebas de factibilidad previas}
+\label{sec:factibilidad}
+
+Antes de comprometer el diseño en la tesis conviene ejecutar pruebas pequeñas en el equipo del laboratorio:
+
+\begin{table}[!htbp]
+\centering
+\caption{Pruebas de factibilidad.}
+\label{tab:factibilidad}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{1.0cm}YY}
+\toprule
+\textbf{ID} & \textbf{Qué se prueba} & \textbf{Criterio de éxito} \\
+\midrule
+F1 & Compilar el proyecto actual con \texttt{ccs-server-cli}. & Genera el \texttt{.out} idéntico en tamaño y símbolos al del IDE; el reloj queda en 200~MHz. \\
+F2 & Cargar el \texttt{.out} con \texttt{dslite} y el \texttt{.ccxml} de la tarjeta. & Código de salida 0; el programa corre y responde \texttt{OK} a \texttt{S}. \\
+F3 & Decidir entre \textit{flash} y \textit{load} (RAM). & Se documenta tiempo de carga y comportamiento al reiniciar. \\
+F4 & Cargar CPU2 por línea de comandos. & Ambos núcleos cargados; o se documenta la limitación y la ruta alternativa. \\
+F5 & Recibir comandos por UART con la interrupción activa. & Los ciclos máximos de la interrupción no aumentan de forma apreciable ni hay \textit{overruns}. \\
+F6 & Lanzar CoppeliaSim por línea de comandos con la escena e iniciar la simulación por ZeroMQ. & La escena abre y la simulación inicia sin intervención. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Plan por etapas}
+\label{sec:plan}
+
+\begin{table}[!htbp]
+\centering
+\caption{Etapas de desarrollo de la GUI.}
+\label{tab:etapas}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{1.0cm}Y>{\raggedright\arraybackslash}p{4.5cm}}
+\toprule
+\textbf{Etapa} & \textbf{Contenido} & \textbf{Criterio de aceptación} \\
+\midrule
+G0 & Diseño, requisitos y pruebas de factibilidad F1 a F6 (este documento). & Aprobación del director. \\
+G1 & Generador por línea de comandos: del YAML al código del péndulo. & Reproduce el código actual con el mismo comportamiento. \\
+G2 & Orquestador: compilar, cargar, abrir CoppeliaSim opcional y arrancar. & Primera prueba desde cero con un solo botón. \\
+G3 & Protocolo de comandos en firmware y monitor con gráficas y registro. & Ajuste de ganancias en línea sin recompilar. \\
+G4 & Pestañas por modelo, formularios de configuración (con periodos de muestreo preestablecidos y parámetros físicos editables) y asistente de primera ejecución. & Un estudiante configura el péndulo sin editar código. \\
+G5 & Empaquetado y documentación (se integra a la guía técnica). & Instalación y primera prueba en un equipo limpio. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Las etapas G1 a G4 se complementan con las etapas M1 a M6 (configuración de modelos y modelos nuevos) y H0 y H1 (hardware de apoyo) del reporte complementario; el orden conjunto se acordaría con el director. La etapa G0 corresponde al incremento actual y las demás se asignarían a los incrementos siguientes de la metodología. \pendiente{acordar con el director la asignación de etapas a incrementos y fechas}
+
+\section{Validación de la interfaz}
+\label{sec:validacion}
+
+Para comprobar que la GUI cumple su propósito se propone medir:
+\begin{itemize}
+    \item \textbf{Tiempo hasta la primera prueba}, desde un equipo con las herramientas instaladas, con el procedimiento manual y con la GUI.
+    \item \textbf{Número de interacciones} (clics y comandos) del ciclo ``cambiar un parámetro y volver a probar''.
+    \item \textbf{Errores de configuración} cometidos por estudiantes en cada caso.
+    \item \textbf{Percepción de uso}, con una escala estandarizada, en coordinación con la validación con estudiantes de la tesis.
+\end{itemize}
+\pendiente{definir el diseño del estudio (número de participantes, instrumentos, aprobación del comité)}
+
+\section{Impacto en la tesis si se aprueba}
+\label{sec:impacto}
+
+Mientras no haya aprobación, ningún cambio se incorpora al documento de tesis. Con el visto bueno, se modificarían: la sección de diseño de la GUI (Capítulo~4) reemplazando la propuesta preliminar; la sección de implementación de la GUI (Capítulo~5), con el estado de las etapas; el cronograma, con las etapas G1 a G5; la guía técnica, con el flujo de la GUI; y, de ser necesario, el texto de objetivos y delimitaciones.
+
+\section{Puntos a decidir con el director}
+\label{sec:decisiones_director}
+
+\begin{enumerate}
+    \item ¿Se aprueba la alternativa B como alcance de la GUI?
+    \item ¿Se acepta Python con PySide6 como tecnología?
+    \item ¿Se acepta ampliar el firmware con un protocolo de comandos por UART?
+    \item ¿Se acepta que CoppeliaSim se abra solo en los modelos que lo requieren?
+    \item ¿Qué se espera como evidencia de la GUI en el avance del 23 de noviembre: este diseño, un prototipo del generador (G1) o ambos?
+    \item ¿Debe la validación de la GUI integrarse con la validación con estudiantes?
+    \item ¿Se aprueba la organización por pestañas (una por modelo y una para modelos nuevos), con el péndulo como única pestaña operativa en esta etapa?
+    \item ¿Se aprueban tres valores preestablecidos de periodo de muestreo por modelo y la edición de parámetros físicos en los modelos fijos?
+    \item ¿Se aprueba posponer el diseño de la caja de hardware hasta contar con la estructura de la interfaz y un segundo modelo fijo?
+\end{enumerate}
+
+\begin{thebibliography}{9}
+\bibitem{ccs_cli} Texas Instruments, \textit{Code Composer Studio 20.5.1 User's Guide: Creating and Building Projects from Command Line}. \url{https://software-dl.ti.com/ccs/esd/documents/users_guide_ccs_20.5.1/ccs_project-command-line.html}
+\bibitem{dss} Texas Instruments, \textit{Code Composer Studio 20.5.1 User's Guide: Legacy Scripting (DSS)}. \url{https://software-dl.ti.com/ccs/esd/documents/users_guide_ccs_20.5.1/sdto_dss_handbook.html}
+\bibitem{uniflash} Texas Instruments, \textit{UniFlash Quick Start Guide}. \url{https://software-dl.ti.com/ccs/esd/uniflash/docs/latest_qsguide.html}
+\bibitem{e2e_dslite} Texas Instruments E2E, \textit{TMS320F280049: CCS CLI flashing w/o UniFlash}. \url{https://e2e.ti.com/support/microcontrollers/c2000-microcontrollers-group/c2000/f/c2000-microcontrollers-forum/1050371/tms320f280049-ccs-cli-flashing-w-o-uniflash}
+\bibitem{e2e_cpu2} Texas Instruments E2E, \textit{TMS320F28379D: UniFlash CLI program CPU2}. \url{https://e2e.ti.com/support/microcontrollers/c2000-microcontrollers-group/c2000/f/c2000-microcontrollers-forum/699802/tms320f28379d-uniflash-cli-program-cpu2}
+\bibitem{e2e_ram} Texas Instruments E2E, \textit{LAUNCHXL-F28379D: cannot load and run dual-core blinky example to RAM}. \url{https://e2e.ti.com/support/microcontrollers/c2000-microcontrollers-group/c2000/f/c2000-microcontrollers-forum/1433024/tms320f28379d-launchxl-f28379d-dev-kit-cannot-load-and-run-dual-core-blinky-example-to-ram}
+\bibitem{e2e_dssvar} Texas Instruments E2E, \textit{TMS320F28027F: reading variables with DSS scripting}. \url{https://e2e.ti.com/support/microcontrollers/c2000-microcontrollers-group/c2000/f/c2000-microcontrollers-forum/1281248/tms320f28027f-during-automation-in-dss-scripting-need-to-read-variable-address}
+\bibitem{coppelia} Coppelia Robotics, \textit{CoppeliaSim User Manual: command line options and ZeroMQ remote API}. \url{https://manual.coppeliarobotics.com}
+\bibitem{pyguis} Python GUIs, \textit{Python GUI libraries comparison}. \url{https://www.pythonguis.com}
+\end{thebibliography}
+
+\end{document}

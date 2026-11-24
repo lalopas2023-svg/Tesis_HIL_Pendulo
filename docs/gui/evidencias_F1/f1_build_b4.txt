@@ -1,0 +1,97 @@
+
+# ================================================================================
+# [Tue Nov 17 13:43:39 CST 2026]: CCS headless build starting... 
+
+
+**** Clean-only build of configuration 'CPU1_RAM_DEBUG' for project 'Proyecto_Pendulo_CPU1' ****
+
+"C:\\ti\\ccs2051\\ccs\\utils\\bin\\gmake" -k clean -r 
+ 
+DEL /F "Proyecto_Pendulo_CPU1.out" 
+DEL /F "F2837xD_Adc.obj" "F2837xD_CodeStartBranch.obj" "F2837xD_CpuTimers.obj" "F2837xD_DefaultISR.obj" "F2837xD_GlobalVariableDefs.obj" "F2837xD_Gpio.obj" "F2837xD_Ipc.obj" "F2837xD_Ipc_Driver_Util.obj" "F2837xD_PieCtrl.obj" "F2837xD_PieVect.obj" "F2837xD_SysCtrl.obj" "F2837xD_usDelay.obj" "ipc_gpio_toggle_cpu01.obj" 
+DEL /F "F2837xD_Adc.d" "F2837xD_CpuTimers.d" "F2837xD_DefaultISR.d" "F2837xD_GlobalVariableDefs.d" "F2837xD_Gpio.d" "F2837xD_Ipc.d" "F2837xD_Ipc_Driver_Util.d" "F2837xD_PieCtrl.d" "F2837xD_PieVect.d" "F2837xD_SysCtrl.d" "ipc_gpio_toggle_cpu01.d" 
+DEL /F "F2837xD_CodeStartBranch.d" "F2837xD_usDelay.d" 
+No se pudo encontrar C:\Users\epasc\Documents\Eddy\Maestria\Tesis\Tesis_HIL\firmware\_factibilidad\proyecto\Proyecto_Pendulo_CPU1\CPU1_RAM_DEBUG\F2837xD_CodeStartBranch.d
+ 
+
+**** Build finished ****
+
+**** Build of configuration 'CPU1_RAM_DEBUG' for project 'Proyecto_Pendulo_CPU1' ****
+
+"C:\\ti\\ccs2051\\ccs\\utils\\bin\\gmake" -k all -r 
+ 
+C2000 Compiler - building file: "../F2837xD_Adc.c"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --include_path="C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include" --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi --preproc_with_compile --preproc_dependency="F2837xD_Adc.d_raw"  "../F2837xD_Adc.c"
+Finished building: "../F2837xD_Adc.c"
+ 
+C2000 Compiler - building file: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_CodeStartBranch.asm"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --include_path="C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include" --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi --preproc_with_compile --preproc_dependency="F2837xD_CodeStartBranch.d_raw"  "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_CodeStartBranch.asm"
+Finished building: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_CodeStartBranch.asm"
+ 
+C2000 Compiler - building file: "../F2837xD_CpuTimers.c"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --include_path="C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include" --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi --preproc_with_compile --preproc_dependency="F2837xD_CpuTimers.d_raw"  "../F2837xD_CpuTimers.c"
+Finished building: "../F2837xD_CpuTimers.c"
+ 
+C2000 Compiler - building file: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_DefaultISR.c"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --include_path="C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include" --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi --preproc_with_compile --preproc_dependency="F2837xD_DefaultISR.d_raw"  "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_DefaultISR.c"
+Finished building: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_DefaultISR.c"
+ 
+C2000 Compiler - building file: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/source/F2837xD_GlobalVariableDefs.c"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --include_path="C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include" --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi --preproc_with_compile --preproc_dependency="F2837xD_GlobalVariableDefs.d_raw"  "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/source/F2837xD_GlobalVariableDefs.c"
+Finished building: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/source/F2837xD_GlobalVariableDefs.c"
+ 
+C2000 Compiler - building file: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_Gpio.c"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --include_path="C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include" --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi --preproc_with_compile --preproc_dependency="F2837xD_Gpio.d_raw"  "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_Gpio.c"
+Finished building: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_Gpio.c"
+ 
+C2000 Compiler - building file: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_Ipc.c"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --include_path="C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include" --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi --preproc_with_compile --preproc_dependency="F2837xD_Ipc.d_raw"  "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_Ipc.c"
+Finished building: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_Ipc.c"
+ 
+C2000 Compiler - building file: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_Ipc_Driver_Util.c"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --include_path="C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include" --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi --preproc_with_compile --preproc_dependency="F2837xD_Ipc_Driver_Util.d_raw"  "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_Ipc_Driver_Util.c"
+Finished building: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_Ipc_Driver_Util.c"
+ 
+C2000 Compiler - building file: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_PieCtrl.c"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --include_path="C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include" --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi --preproc_with_compile --preproc_dependency="F2837xD_PieCtrl.d_raw"  "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_PieCtrl.c"
+Finished building: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_PieCtrl.c"
+ 
+C2000 Compiler - building file: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_PieVect.c"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --include_path="C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include" --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi --preproc_with_compile --preproc_dependency="F2837xD_PieVect.d_raw"  "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_PieVect.c"
+Finished building: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_PieVect.c"
+ 
+C2000 Compiler - building file: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_SysCtrl.c"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --include_path="C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include" --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi --preproc_with_compile --preproc_dependency="F2837xD_SysCtrl.d_raw"  "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_SysCtrl.c"
+"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_SysCtrl.c", line 837 (col. 47): advice #2614-D: (Performance) Use --fp_mode=relaxed to enable TMU hardware support for FP division.
+"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_SysCtrl.c", line 845 (col. 50): advice #3195-D: (Performance) EABI double precision is 64-bits as opposed to 32-bits for COFF. Consider changing doubles to floats for improved performance in FPU32-mode.
+"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_SysCtrl.c", line 845 (col. 31): advice #3195-D: (Performance) EABI double precision is 64-bits as opposed to 32-bits for COFF. Consider changing doubles to floats for improved performance in FPU32-mode.
+"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_SysCtrl.c", line 845 (col. 81): advice #3195-D: (Performance) EABI double precision is 64-bits as opposed to 32-bits for COFF. Consider changing doubles to floats for improved performance in FPU32-mode.
+"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_SysCtrl.c", line 845 (col. 62): advice #3195-D: (Performance) EABI double precision is 64-bits as opposed to 32-bits for COFF. Consider changing doubles to floats for improved performance in FPU32-mode.
+Finished building: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_SysCtrl.c"
+ 
+C2000 Compiler - building file: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_usDelay.asm"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --include_path="C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include" --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi --preproc_with_compile --preproc_dependency="F2837xD_usDelay.d_raw"  "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_usDelay.asm"
+Finished building: "C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/source/F2837xD_usDelay.asm"
+ 
+C2000 Compiler - building file: "../ipc_gpio_toggle_cpu01.c"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --include_path="C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/include" --include_path="C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/include" --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi --preproc_with_compile --preproc_dependency="ipc_gpio_toggle_cpu01.d_raw"  "../ipc_gpio_toggle_cpu01.c"
+"../ipc_gpio_toggle_cpu01.c", line 404: warning #1-D: last line of file ends without a newline
+"../ipc_gpio_toggle_cpu01.c", line 200 (col. 70): advice #2614-D: (Performance) Use --fp_mode=relaxed to enable TMU hardware support for FP division.
+Finished building: "../ipc_gpio_toggle_cpu01.c"
+ 
+C2000 Linker - building target: "Proyecto_Pendulo_CPU1.out"
+"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/bin/cl2000" -v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2 --define=CPU1 --define=_LAUNCHXL_F28379D -g --printf_support=full --diag_warning=225 --display_error_number --abi=eabi -z -m"Proyecto_Pendulo_CPU1.map" --heap_size=0x400 --stack_size=0x3F8 --warn_sections -i"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/lib" -i"C:/ti/ccs2051/ccs/tools/compiler/ti-cgt-c2000_25.11.0.LTS/include" -i"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/common/cmd" -i"C:/ti/c2000/C2000Ware_5_02_00_00/device_support/f2837xd/headers/cmd" --reread_libs --display_error_number --xml_link_info="Proyecto_Pendulo_CPU1_linkInfo.xml" --rom_model -o "Proyecto_Pendulo_CPU1.out" "./F2837xD_Adc.obj" "./F2837xD_CodeStartBranch.obj" "./F2837xD_CpuTimers.obj" "./F2837xD_DefaultISR.obj" "./F2837xD_GlobalVariableDefs.obj" "./F2837xD_Gpio.obj" "./F2837xD_Ipc.obj" "./F2837xD_Ipc_Driver_Util.obj" "./F2837xD_PieCtrl.obj" "./F2837xD_PieVect.obj" "./F2837xD_SysCtrl.obj" "./F2837xD_usDelay.obj" "./ipc_gpio_toggle_cpu01.obj"  -l2837xD_RAM_lnk_cpu1.cmd -lF2837xD_Headers_nonBIOS_cpu1.cmd -llibc.a -lrts2800_fpu32_eabi.lib 
+<Linking>
+Finished building target: "Proyecto_Pendulo_CPU1.out"
+ 
+
+**** Build finished ****
+
+# ----------------------------------------
+# Problem summary for project 'Proyecto_Pendulo_CPU1': 0 errors, 2 warnings
+   Warning: [/Proyecto_Pendulo_CPU1]: Project 'Proyecto_Pendulo_CPU1' has no explicit encoding set
+   Warning: ipc_gpio_toggle_cpu01.c [line 404]: #1-D: last line of file ends without a newline
+
+# --------------------------------------------------------------------------------
+# [Tue Nov 17 13:43:47 CST 2026]: CCS headless build complete - 0 out of 1 projects have errors
+

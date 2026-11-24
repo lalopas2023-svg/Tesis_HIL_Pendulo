@@ -1,0 +1,855 @@
+% =============================================================================
+% Reporte explicativo (punto de vista de teoria de control)
+% HIL de pendulo invertido en TMS320F28379D (LAUNCHXL-F28379D)
+%
+% COMPILAR:  pdflatex reporte_teoria_control.tex  (dos veces, para indices/refs)
+% IMAGENES:  las figuras marcadas "[Insertar imagen]" muestran un recuadro. Para
+%            sustituirlas, guarda tu imagen con el nombre indicado en el recuadro
+%            (carpeta del .tex o carpeta capturas/) y vuelve a compilar: el
+%            documento la usa automaticamente, sin tocar el codigo.
+% =============================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-tabla]{babel}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs,array,tabularx}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{./}{capturas/}{../capturas/}{figuras/}}
+\setlength{\parskip}{4pt}
+\setlength{\emergencystretch}{3em}
+\captionsetup{font=small,labelfont=bf}
+
+% ----------------------------- atajos de notacion ----------------------------
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\gL}{\tfrac{g}{L}}
+\newcommand{\invJ}{\tfrac{1}{J}}
+\newcommand{\LSB}{\mathrm{LSB}}
+
+% ------------------- recuadro de imagen pendiente / imagen real --------------
+% \espacioimagen{archivo.png}{Pie de figura}{Que debe mostrar la imagen}
+\newcommand{\espacioimagen}[3]{%
+  \begin{figure}[H]\centering
+  \IfFileExists{#1}%
+    {\includegraphics[width=.88\linewidth]{#1}}%
+    {\fbox{\parbox[c][5.2cm][c]{.84\linewidth}{\centering
+       \textbf{[Insertar imagen]}\\[3pt]
+       \texttt{\detokenize{#1}}\\[5pt]
+       \small #3}}}%
+  \caption{#2}
+  \end{figure}}
+
+% ----------------------------- estilo de codigo ------------------------------
+\definecolor{cgris}{gray}{0.45}
+\definecolor{cverde}{rgb}{0.10,0.45,0.15}
+\definecolor{cazul}{rgb}{0.10,0.20,0.65}
+\lstdefinestyle{codigo}{
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{cazul}\bfseries,
+  commentstyle=\color{cverde}\itshape,
+  numberstyle=\tiny\color{cgris},
+  numbers=left, numbersep=6pt, stepnumber=1,
+  breaklines=true, breakatwhitespace=false,
+  frame=single, rulecolor=\color{cgris},
+  showstringspaces=false, tabsize=2,
+  xleftmargin=1.2em, framexleftmargin=1.2em,
+  captionpos=b, aboveskip=8pt, belowskip=6pt
+}
+\lstdefinelanguage{matlabx}{
+  morekeywords={for,end,if,else,elseif,while,function,return,true,false,clc,clear,close,all},
+  morecomment=[l]{\%}, sensitive=true}
+\lstset{style=codigo}
+
+\title{\textbf{Simulaci\'on Hardware-in-the-Loop de un p\'endulo invertido\\
+en el TMS320F28379D: fundamento te\'orico de control,\\
+implementaci\'on y validaci\'on contra MATLAB}}
+\author{Eduardo Pascual P\'erez\\[2pt]
+\small Maestr\'ia en Rob\'otica, Universidad Tecnol\'ogica de la Mixteca}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% =============================================================================
+\section{Objetivo y alcance}
+% =============================================================================
+El trabajo implementa un banco de pruebas \emph{Hardware-in-the-Loop} (HIL) en el que
+\textbf{el controlador es real} (un PID ejecutado en el DSP TMS320F28379D) y
+\textbf{la planta es simulada} (un p\'endulo invertido cuyo estado se integra num\'ericamente
+dentro del propio DSP). Planta y controlador se comunican a trav\'es de las
+\emph{se\~nales el\'ectricas reales} de los convertidores del chip: la salida del
+DAC representa el \'angulo del p\'endulo y la entrada del ADC es lo que ``ve'' el
+controlador. Una segunda etapa a\~nade una perturbaci\'on de par introducida mediante
+un potenci\'ometro de precisi\'on.
+
+Este documento explica, desde la teor\'ia de control, \emph{qu\'e} se est\'a simulando
+(secci\'on~\ref{sec:modelo}), \emph{c\'omo} se controla y qu\'e propiedades tiene el lazo
+(secci\'on~\ref{sec:control}), \emph{c\'omo} se discretiz\'o y se implement\'o en el DSP
+(secciones~\ref{sec:disc}--\ref{sec:codigo}), \emph{por qu\'e} el an\'alisis en MATLAB se
+dise\~n\'o como se dise\~n\'o (secci\'on~\ref{sec:matlab}) y \emph{qu\'e resultados} se
+obtuvieron (secci\'on~\ref{sec:resultados}).
+
+\paragraph{Qu\'e se valida con este montaje.} Un HIL no valida el modelo f\'isico (el
+p\'endulo es simulado), sino la \textbf{implementaci\'on del controlador}: sus unidades,
+su discretizaci\'on, su temporizaci\'on, el efecto de la cuantizaci\'on de 12 bits y de los
+convertidores reales. La referencia de comparaci\'on es la misma ley de control
+simulada en MATLAB; la diferencia entre ambas son, por construcci\'on, efectos del hardware.
+
+% =============================================================================
+\section{Modelo del sistema simulado}\label{sec:modelo}
+% =============================================================================
+\subsection{P\'endulo invertido con par de entrada}
+Se modela una masa puntual $m$ en el extremo de una varilla ligera de longitud $L$,
+articulada en la base, con fricci\'on viscosa $b$ y un par de control $u$ aplicado en la
+articulaci\'on. El \'angulo $\theta$ se mide respecto a la vertical ($\theta=0$ es el equilibrio
+inestable). La perturbaci\'on externa $d$ es un par adicional. La ecuaci\'on de Newton-Euler
+para la rotaci\'on es
+\begin{equation}
+J\,\ddot\theta = m g L \sin\theta - b\,\dot\theta + u + d, \qquad J = mL^2 .
+\label{eq:nolineal}
+\end{equation}
+El t\'ermino $mgL\sin\theta$ es el par gravitatorio y tiene signo \emph{desestabilizante}:
+si $\theta>0$ la gravedad aumenta $\theta$. Por eso el sistema en lazo abierto es inestable
+y requiere realimentaci\'on.
+
+\subsection{Linealizaci\'on usada en el firmware}
+El firmware (y MATLAB) integran la versi\'on linealizada, $\sin\theta\approx\theta$:
+\begin{equation}
+\ddot\theta = \frac{g}{L}\,\theta - \frac{b}{J}\,\dot\theta + \frac{1}{J}\,(u+d).
+\label{eq:lineal}
+\end{equation}
+En el c\'odigo esto aparece como \texttt{gL*theta - b\_fric*invJ*theta\_dot + invJ*(u + d)}.
+La aproximaci\'on es v\'alida mientras $|\theta|$ sea peque\~no: el error relativo de
+$\sin\theta\approx\theta$ es $\approx\theta^2/6$, es decir $0.17\,\%$ para la condici\'on inicial
+$\theta_0=0.1$~rad y $0.46\,\%$ en el pico m\'as grande observado con perturbaci\'on
+($0.167$~rad). Adem\'as, el controlador mantiene $\theta$ cerca de cero, que es justo
+donde la linealizaci\'on es mejor. Es una decisi\'on de modelado, no un error del c\'odigo:
+cambiarla a $\sin\theta$ ser\'ia inmediato, pero entonces el modelo lineal de la
+secci\'on~\ref{sec:control} ya no ser\'ia exacto.
+
+\subsection{Representaci\'on en espacio de estados y polos de lazo abierto}
+Con $\bm x=[\theta\;\;\omega]^\top$, $\omega=\dot\theta$:
+\begin{equation}
+\dot{\bm x}=\underbrace{\begin{bmatrix}0&1\\ g/L & -b/J\end{bmatrix}}_{\bm A}\bm x+
+\underbrace{\begin{bmatrix}0\\ 1/J\end{bmatrix}}_{\bm B}(u+d),\qquad y=\theta .
+\end{equation}
+Los polos son las ra\'ices de $s^2+\tfrac{b}{J}s-\tfrac{g}{L}=0$:
+\begin{equation}
+s_{1,2}=-\frac{b}{2J}\pm\sqrt{\Big(\frac{b}{2J}\Big)^2+\frac{g}{L}}
+\;\Rightarrow\; s_1=+5.447\ \mathrm{s^{-1}},\quad s_2=-6.003\ \mathrm{s^{-1}} .
+\end{equation}
+Hay un polo real en el semiplano derecho: una perturbaci\'on crece como $e^{5.447\,t}$,
+duplic\'andose cada $\ln 2/5.447\approx 0.13$~s. Esto fija los requisitos del lazo: el
+controlador debe actuar en una escala de decenas de milisegundos (de ah\'i el muestreo
+de la derivada a 100~Hz y el c\'alculo del PID a 100~kHz).
+
+\subsection{Par\'ametros y justificaci\'on}
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}l c l X@{}}
+\toprule
+Par\'ametro & S\'imbolo & Valor & Papel / por qu\'e importa \\ \midrule
+Gravedad & $g$ & 9.81 m/s$^2$ & Fija la inestabilidad: $g/L=32.7\ \mathrm{s^{-2}}$. \\
+Longitud & $L$ & 0.3 m & Escala de tiempo: polo inestable $\sqrt{g/L}\approx5.7$~rad/s (constante de tiempo $\approx0.18$~s). \\
+Masa & $m$ & 0.1 kg & Junto con $L$ da $J=mL^2=9\times10^{-3}$ kg\,m$^2$ y $mgL=0.294$ N\,m (par gravitatorio por radian). \\
+Fricci\'on viscosa & $b$ & 0.005 N\,m\,s/rad & Amortiguamiento natural muy peque\~no: $b/J=0.556\ \mathrm{s^{-1}}$ (casi no ayuda; el amortiguamiento lo aporta $K_D$). \\
+Inercia & $J$ & 9$\times10^{-3}$ kg\,m$^2$ & $1/J=111.1$: ganancia de la planta (aceleraci\'on por unidad de par). \\
+Paso de integraci\'on & $T_s$ & 10 $\mu$s & Mucho menor que cualquier din\'amica ($\omega T_s\sim10^{-4}$); ver sec.~\ref{sec:disc}. \\
+Condici\'on inicial & $\theta_0$ & 0.1 rad & Perturbaci\'on inicial de 5.7$^\circ$: excita el transitorio, dentro de la zona lineal. \\
+Rango del ADC/DAC & $\pm\pi/2$ & 0--4095 & Mapea el \'angulo a 12 bits: 1~LSB $=0.767$~mrad. \\
+Saturaci\'on del control & $u_{\max}$ & $\pm10$ N\,m & L\'imite del actuador. En las pruebas $|u|_{\max}=0.61$: nunca satur\'o. \\ \bottomrule
+\end{tabularx}
+\caption{Par\'ametros f\'isicos y num\'ericos del modelo (los mismos en el firmware y en MATLAB).}
+\end{table}
+
+\paragraph{Unidades.} Como $J=mL^2$ est\'a en kg\,m$^2$, el par de entrada $u$ (y $d$) est\'a en
+N\,m. La condici\'on necesaria de estabilizaci\'on proporcional,
+$K_P>mgL=0.294$~N\,m/rad (ec.~\ref{eq:routh}), se cumple con un margen grande
+($K_P=5$, es decir 17 veces).
+
+% =============================================================================
+\section{Control: PID, estabilidad y rechazo de perturbaciones}\label{sec:control}
+% =============================================================================
+\subsection{Estructura del controlador}
+La referencia es $\theta_{\mathrm{ref}}=0$, de modo que el error es $e=-\theta_{\mathrm{med}}$. La
+ley implementada es
+\begin{equation}
+u = K_P\,e - K_D\,\hat\omega + K_I\!\int e\,\dd t,\qquad
+K_P=5,\ K_I=2,\ K_D=0.15 ,
+\end{equation}
+con tres decisiones de dise\~no que conviene justificar:
+
+\begin{enumerate}[leftmargin=1.6em]
+\item \textbf{Derivada sobre la medici\'on} ($-K_D\hat\omega$, no $K_D\dot e$). Con
+referencia constante ambas coinciden, pero la forma elegida evita el ``golpe derivativo''
+si en el futuro la referencia cambia en escal\'on.
+\item \textbf{Derivada lenta y filtrada.} $\hat\omega$ se calcula cada 10~ms como
+$\omega_m=(\theta_k-\theta_{k-1})/0.01$ y se filtra con un IIR de primer orden:
+\begin{equation}
+\hat\omega_k=(1-\alpha)\,\hat\omega_{k-1}+\alpha\,\omega_{m,k},\qquad \alpha=0.386 .
+\label{eq:iir}
+\end{equation}
+La medici\'on llega cuantizada a 0.767~mrad; derivarla a 100~kHz producir\'ia saltos de
+$0.767\,\mathrm{mrad}/10\,\mu\mathrm{s}=77$~rad/s. Derivando cada 10~ms, un escal\'on de
+1~LSB vale s\'olo $0.0767$~rad/s y, tras el filtro y $K_D$, mueve $u$ en
+$0.15\cdot0.386\cdot0.0767\approx4.4\times10^{-3}$. El IIR equivale a una constante de tiempo
+$\tau=-T/\ln(1-\alpha)=0.0205$~s (frecuencia de corte $\approx7.8$~Hz).
+\item \textbf{Anti-windup por \emph{clamp} del integrador} a $\pm2$ y saturaci\'on de $u$ a
+$\pm10$. Evita que el t\'ermino integral crezca sin l\'imite cuando $u$ satura.
+\end{enumerate}
+
+\subsection{Funci\'on de transferencia y polinomio caracter\'istico}
+Con derivada ideal y la ec.~\eqref{eq:lineal}, sustituyendo $u=-K_P\theta-K_D\dot\theta-K_I\!\int\theta$:
+\begin{equation}
+\Big(s^2+\tfrac{b+K_D}{J}\,s+\tfrac{K_P}{J}-\tfrac{g}{L}+\tfrac{K_I}{J\,s}\Big)\theta(s)=\tfrac{1}{J}\,d(s)
+\;\Rightarrow\;
+\frac{\theta(s)}{d(s)}=\frac{\tfrac1J\,s}{s^3+a_2s^2+a_1s+a_0}
+\end{equation}
+\begin{equation}
+a_2=\tfrac{b+K_D}{J}=17.22,\qquad a_1=\tfrac{K_P}{J}-\tfrac gL=522.9,\qquad a_0=\tfrac{K_I}{J}=222.2 .
+\end{equation}
+\textbf{Criterio de Routh--Hurwitz} (polinomio c\'ubico): estable si $a_2,a_1,a_0>0$ y
+$a_2a_1>a_0$. Es decir
+\begin{equation}
+K_P>mgL,\qquad K_I>0,\qquad \frac{(b+K_D)}{J}\Big(\frac{K_P}{J}-\frac gL\Big)>\frac{K_I}{J}.
+\label{eq:routh}
+\end{equation}
+Num\'ericamente $a_2a_1=9005\gg a_0=222$: estable con holgura. Cada ganancia tiene un
+papel claro: $K_P$ debe vencer la gravedad ($a_1$) y fija la rigidez; $K_D$ aporta
+amortiguamiento ($a_2$); $K_I$ elimina el error estacionario y determina el polo lento.
+
+\subsection{Polos de lazo cerrado}
+\begin{table}[H]\centering\small
+\begin{tabular}{@{}lll@{}}\toprule
+Modelo & Polos de lazo cerrado & Observaci\'on \\ \midrule
+PID con derivada ideal & $-8.40\pm21.10j,\ -0.431$ & $\omega_n=22.7$~rad/s, $\zeta=0.37$ \\
++ filtro de derivada ($\tau=20.5$~ms) & $-8.64\pm26.85j,\ -0.431,\ -31.6$ & $\zeta\approx0.31$ \\ \bottomrule
+\end{tabular}
+\caption{Polos del lazo cerrado calculados con el modelo lineal (continuo, aproximado).
+El muestreo de 100~Hz de la derivada se aproxima como un retardo medio de 5~ms en el an\'alisis
+frecuencial de la secci\'on~\ref{sec:margenes}.}
+\end{table}
+Interpretaci\'on:
+\begin{itemize}[leftmargin=1.6em]
+\item El \textbf{par complejo} ($\omega_n\approx23$--27~rad/s, $\zeta\approx0.3$--$0.4$) gobierna el
+transitorio r\'apido: es subamortiguado, lo que produce el \emph{rebasamiento} que se ve al inicio
+de la corrida (el \'angulo cruza el cero y baja a valores negativos antes de volver).
+\item El \textbf{polo real lento} $s\approx-a_0/a_1=-0.43$~s$^{-1}$ ($\tau\approx2.3$~s) lo introduce el
+integrador. Es el que determina la cola del asentamiento: de ah\'i que, tras una perturbaci\'on, el
+\'angulo tarde varios segundos en llegar a $\approx0$ aunque el pico ocurra en 0.12~s.
+\end{itemize}
+
+\subsection{Rechazo de perturbaci\'on y error estacionario}
+\begin{itemize}[leftmargin=1.6em]
+\item \textbf{Con acci\'on integral} $\theta/d$ tiene un cero en $s=0$: ante un escal\'on de $d$,
+$\theta(\infty)=0$ y el control compensa exactamente, $u(\infty)=-d$. Es lo que se verifica
+experimentalmente con la columna $u+d\approx0$.
+\item \textbf{Sin integral} ($K_I=0$) quedar\'ia un error $\theta_\infty=d/(K_P-mgL)=0.2125\,d$:
+106~mrad para $d=0.5$. La acci\'on integral es, por tanto, esencial.
+\item \textbf{Linealidad.} Sin saturaci\'on, el pico de $\theta$ es proporcional a $d$: la simulaci\'on da
+274~mrad por unidad de $d$ (27~mrad para $d=0.1$; 137~mrad para $d=0.5$), siempre en $t\approx0.12$~s.
+\item \textbf{Error por offset del ADC.} Si el ADC mide con un sesgo $\delta$ (en LSB), el
+controlador lleva a cero la medici\'on, no el \'angulo real, de modo que $\theta_{\mathrm{real}}\to-\delta\cdot0.767$~mrad.
+Con la tarjeta a 100~MHz se midi\'o $\delta=-17.6$~LSB. Una captura sin calibrar del repositorio (\texttt{datos\_sin\_perturbacion.csv}) tiene media estacionaria de $13.5$~mrad, que coincide con $17.6\times0.767=13.5$~mrad; es coherente con una corrida a 100~MHz, aunque no consta el reloj con que se tom\'o esa captura. A 200~MHz
+se midi\'o $+6.6$~LSB; con la calibraci\'on \texttt{ADC\_CAL\_B}$=6.1$ el residuo es
+0.5~LSB ($\approx0.4$~mrad), que coincide con los 0.2--0.5~mrad observados.
+\end{itemize}
+
+\subsection{M\'argenes de estabilidad (an\'alisis frecuencial aproximado)}\label{sec:margenes}
+Con $L(s)=G(s)\,C(s)$, $G(s)=\dfrac{1/J}{s^2+\frac bJ s-\frac gL}$ y
+$C(s)=K_P+\dfrac{K_I}{s}+\dfrac{K_D\,s}{\tau s+1}e^{-sT_d}$ ($\tau=20.5$~ms, $T_d=5$~ms como
+retardo equivalente del muestreo a 100~Hz), se obtiene:
+\begin{table}[H]\centering\small
+\begin{tabular}{@{}ll@{}}\toprule
+Cantidad & Valor aproximado \\ \midrule
+Frecuencia de cruce $\omega_c$ & 29 rad/s (4.6 Hz) \\
+Margen de fase & $22^\circ$ \\
+Margen de retardo adicional ($\mathrm{PM}/\omega_c$) & 13 ms \\
+Margen de ganancia inferior (en 3.0 rad/s) & $\approx13\times$ \\
+Margen de ganancia superior (en 96 rad/s) & $\approx7.2\times$ (17 dB) \\
+Pico de sensibilidad $M_s=\max|1/(1+L)|$ & $2.7$ (en 31 rad/s) \\ \bottomrule
+\end{tabular}
+\caption{M\'argenes del lazo con el modelo aproximado. Son estimaciones: el controlador real es
+h\'ibrido (dos velocidades de muestreo) y aqu\'i se aproxima con un filtro y un retardo.}
+\end{table}
+Un margen de fase de $\approx22^\circ$ y $M_s\approx2.7$ indican un lazo estable pero
+\emph{poco amortiguado} ---consistente con $\zeta\approx0.3$ del par dominante---. Esto est\'a
+ligado al tema de amortiguamiento que queda por discutir: el principal responsable del
+rebasamiento es el retardo y el filtrado de la derivada, no el modelo de la planta.
+
+\espacioimagen{fig_polos_bode.png}{Mapa de polos y diagrama de Bode/Nyquist de $L(s)$.}
+{Mapa de polos de lazo abierto y cerrado (ec. de la sec.~3.3) y diagrama de Bode con $\omega_c$, margen de fase y de ganancia marcados. Se puede generar con el script del Ap\'endice~B.}
+
+% =============================================================================
+\section{Discretizaci\'on y temporizaci\'on}\label{sec:disc}
+% =============================================================================
+\subsection{Esquema multi-tasa}
+\begin{table}[H]\centering\small
+\begin{tabular}{@{}llll@{}}\toprule
+Tarea & Periodo & Frecuencia & Contador en el c\'odigo \\ \midrule
+ISR: ADC $\rightarrow$ PID $\rightarrow$ planta $\rightarrow$ DAC & 10 $\mu$s & 100 kHz & Timer0 \\
+Derivada cruda + filtro IIR & 10 ms & 100 Hz & \texttt{contador\_derivada} (1000) \\
+Telemetr\'ia UART & 10 ms & 100 Hz & \texttt{contador\_serial} (1000) \\
+Potenci\'ometro (MODO 1) & 10 ms, desfasado 5 ms & 100 Hz & \texttt{contador\_pot} (1000, fase 500) \\ \bottomrule
+\end{tabular}
+\caption{Tasas de ejecuci\'on. Timer0: 2000 ciclos a 200~MHz $=10\,\mu$s.}
+\end{table}
+
+\subsection{Integrador de la planta: Euler--Cromer}
+La planta se integra con Euler semi-impl\'icito (Euler--Cromer): primero se actualiza la
+velocidad y \emph{con la velocidad nueva} se actualiza la posici\'on,
+\begin{equation}
+\omega_{k+1}=\omega_k+T_s\Big(\tfrac gL\theta_k-\tfrac bJ\omega_k+\tfrac1J(u_k+d_k)\Big),\qquad
+\theta_{k+1}=\theta_k+T_s\,\omega_{k+1}.
+\end{equation}
+Es el m\'etodo m\'as barato (sin llamadas a funciones, adecuado para una ISR de 10~$\mu$s) y,
+a diferencia del Euler expl\'icito, no inyecta energ\'ia artificial en sistemas oscilatorios.
+Con $T_s=10\,\mu$s y la din\'amica m\'as r\'apida del lazo en $\approx30$~rad/s, $\omega T_s\approx3\times10^{-4}$:
+el error de discretizaci\'on es despreciable frente a la resoluci\'on del ADC.
+
+\subsection{Retardos del lazo HIL}
+La salida del DAC se escribe al final de la ISR y el ADC la convierte en la ISR siguiente: hay
+un retardo de un periodo ($10\,\mu$s). A la frecuencia de cruce eso son
+$29\cdot10^{-5}\approx0.017^\circ$ de fase: despreciable. En cambio, el retardo de la derivada a
+100~Hz (efecto de retenedor de orden cero, $\approx5$~ms) s\'i es relevante: consume del orden de
+$29\cdot0.005\cdot57.3\approx8^\circ$ del margen de fase y por eso se incluy\'o en el an\'alisis de la
+secci\'on~\ref{sec:margenes}.
+
+\subsection{Cuantizaci\'on}
+La conversi\'on \'angulo$\leftrightarrow$c\'odigo es lineal:
+\begin{equation}
+\mathrm{DAC}=\mathrm{round}\!\Big(\tfrac{\theta-\theta_{\min}}{\theta_{\max}-\theta_{\min}}\,4095\Big),\qquad
+\theta_{\mathrm{med}}=\theta_{\min}+\frac{\mathrm{ADC}-B}{M}\cdot\frac{\pi}{4095},
+\end{equation}
+con $\theta_{\min}=-\pi/2$, $B=$\texttt{ADC\_CAL\_B}$=6.1$ LSB y $M=$\texttt{ADC\_CAL\_M}$=1$.
+Un LSB equivale a $\pi/4095=0.7672$~mrad. El DAC se \emph{redondea} (no se trunca): truncar
+introduc\'ia un sesgo de $-0.5$~LSB ($-0.38$~mrad). La telemetr\'ia se redondea a 1~mrad, as\'i que
+el error entre DSP y simulaci\'on tiene un piso del orden de 1~mrad que no es un fallo.
+
+% =============================================================================
+\section{Arquitectura del banco HIL}\label{sec:hil}
+% =============================================================================
+\begin{figure}[H]\centering
+\begin{tikzpicture}[
+  blk/.style={draw,rectangle,rounded corners=2pt,minimum height=9mm,align=center,font=\small},
+  sum/.style={draw,circle,inner sep=1pt,font=\small},
+  >={Stealth[length=2.2mm]}]
+\node[sum] (s1) at (0,0) {$+$};
+\node[blk,minimum width=20mm] (pid) at (3,0) {PID};
+\node[sum] (s2) at (5.6,0) {$+$};
+\node[blk,minimum width=42mm,font=\scriptsize] (pl) at (9.4,0) {Planta simulada (en la ISR)\\[1pt]$\ddot\theta=\frac gL\theta-\frac bJ\dot\theta+\frac{u+d}{J}$};
+\node[blk,minimum width=26mm,font=\scriptsize] (pert) at (5.6,1.7) {$d$: potenci\'ometro\\(pin 29) o escal\'on};
+\node[blk,minimum width=20mm,font=\scriptsize] (dac) at (9.4,-2.6) {DAC-B\\(pin 70)};
+\node[blk,minimum width=16mm,font=\scriptsize] (cab) at (6.9,-2.6) {Jumper};
+\node[blk,minimum width=20mm,font=\scriptsize] (adc) at (4.4,-2.6) {ADC-A0\\(pin 30)};
+\node[blk,minimum width=30mm,font=\scriptsize] (der) at (2.2,-1.3) {Derivada 100 Hz\\+ IIR $\alpha{=}0.386$};
+\node (ref) at (-1.9,0) {$\theta_{\mathrm{ref}}=0$};
+\coordinate (q) at (2.2,-2.6);
+\draw[->] (ref) -- (s1);
+\draw[->] (s1) -- node[above,font=\scriptsize]{$e$} (pid);
+\draw[->] (pid) -- node[above,font=\scriptsize]{$u$} (s2);
+\draw[->] (s2) -- (pl);
+\draw[->] (pert) -- node[right,font=\scriptsize]{$d$} (s2);
+\draw[->] (pl.south -| dac.north) -- node[right,font=\scriptsize]{$\theta$} (dac.north);
+\draw[->] (dac) -- (cab);
+\draw[->] (cab) -- (adc);
+\draw (adc.west) -- node[below,font=\scriptsize]{$\theta_{\mathrm{med}}$} (q);
+\draw[->] (q) -- (der.south);
+\draw[->] (der.north) -- ++(0,0.45) -| ([xshift=3mm]pid.south);
+\draw[->] (q) -- (0,-2.6) -- node[left,font=\scriptsize]{$-$} (s1.south);
+\end{tikzpicture}
+\caption{Diagrama de bloques del lazo HIL. La rama de la derivada aporta $-K_D\hat\omega$ al PID. Salvo el trayecto f\'isico DAC$\rightarrow$jumper$\rightarrow$ADC, todo el lazo (PID, derivada, planta) se ejecuta como software en la misma ISR del CPU1.}
+\end{figure}
+
+\paragraph{Cadena de datos.} (1) La ISR de 100~kHz lee el ADC, calcula el PID e integra la planta;
+(2) escribe el \'angulo resultante al DAC-B; (3) cada 10~ms la ISR activa una bandera y el bucle
+principal env\'ia por UART (SCI-A, 115200~baud) una l\'inea de texto con enteros separados por comas;
+(4) un script de Python lee el puerto, guarda un CSV y mueve el p\'endulo en CoppeliaSim
+(visualizaci\'on); (5) los CSV se comparan despu\'es con MATLAB.
+
+\paragraph{Por qu\'e un lazo f\'isico DAC$\rightarrow$ADC.} Cerrar el lazo por los convertidores reales
+permite observar, en un banco sencillo, efectos que una simulaci\'on pura no tiene: cuantizaci\'on, offset
+y ganancia de los conversores, ruido, y la dependencia del reloj. Los diagn\'osticos de esta tesis (offset
+distinto a 100 y 200~MHz, calibraci\'on) surgen exactamente de ello.
+
+\espacioimagen{foto_montaje.png}{Montaje experimental.}
+{Fotograf\'ia del LaunchPad con el jumper DAC-B (pin 70) $\rightarrow$ ADC-A0 (pin 30), el potenci\'ometro en el pin 29 y el cable USB a la PC.}
+
+\espacioimagen{coppelia_pendulo.png}{Visualizaci\'on en CoppeliaSim.}
+{Captura de la escena de CoppeliaSim con el p\'endulo y la gr\'afica de $\theta$ (y de $d$ en la etapa con perturbaci\'on).}
+
+% =============================================================================
+\section{Implementaci\'on en el DSP: c\'odigo y configuraci\'on}\label{sec:codigo}
+% =============================================================================
+Los fragmentos siguientes son extractos literales de \texttt{control\_hil\_v3.c} y
+\texttt{control\_perturbacion.c} (comentarios sin acentos por compatibilidad con el compilador).
+
+\subsection{Reloj del sistema y su efecto}
+Con el s\'imbolo predefinido \texttt{\_LAUNCHXL\_F28379D} a nivel de \emph{proyecto}, el SDK configura
+SYSCLK$=200$~MHz y LSPCLK$=50$~MHz. Sin \'el, el PLL queda a 100/25~MHz: el Timer0 corre a la
+mitad de velocidad (la ISR ya no dura 10~$\mu$s), el divisor de la UART cambia y, adem\'as, cambia el
+offset DAC$\rightarrow$ADC (sec.~\ref{sec:resultados}). El c\'odigo lo previene as\'i:
+\begin{lstlisting}[language=C,caption={Selecci\'on autom\'atica de LSPCLK y c\'alculo del divisor de baudios.}]
+#ifdef _LAUNCHXL_F28379D
+  #define LSPCLK_HZ  50000000UL
+#else
+  #warning "Falta _LAUNCHXL_F28379D: el reloj podria quedar en 100 MHz"
+  #define LSPCLK_HZ  25000000UL
+#endif
+#define BAUD     115200UL
+#define BRR_VAL  ((LSPCLK_HZ + 4UL*BAUD) / (8UL*BAUD) - 1UL) // 53 (50 MHz) o 26 (25 MHz)
+\end{lstlisting}
+El valor $\mathrm{BRR}=\mathrm{round}\big(\mathrm{LSPCLK}/(8\,\mathrm{BAUD})\big)-1$ da $53$ a 50~MHz:
+baudios reales $=50\,\mathrm{MHz}/(8\cdot54)=115\,741$ ($+0.47\,\%$, dentro de tolerancia). El valor
+anterior, 27 a 25~MHz, daba $-3.1\,\%$ y era el l\'imite de lo tolerable.
+
+\subsection{Par\'ametros del controlador y de la planta}
+\begin{lstlisting}[language=C,caption={Constantes del lazo (id\'enticas en MATLAB).}]
+#define THETA_INIT  0.1f          // condicion inicial (rad)
+#define Ts          0.00001f      // 10 us: paso de la planta y del PID
+#define KP          5.0f
+#define KI          2.0f
+#define KD          0.15f
+#define U_MIN       -10.0f
+#define U_MAX       10.0f
+#define THETA_MIN   -1.570796f    // -pi/2 <-> codigo 0
+#define THETA_MAX    1.570796f    // +pi/2 <-> codigo 4095
+#define THETA_PER_LSB ((THETA_MAX-THETA_MIN)/4095.0f)   // 0.7672 mrad
+#define g 9.81f
+#define L 0.3f
+#define m 0.1f
+#define b_fric 0.005f
+#define J    (m*L*L)
+#define invJ (1.0f/J)
+#define gL   (g/L)
+\end{lstlisting}
+Se usan \texttt{float} de 32 bits (el F28379D tiene unidad de punto flotante de precisi\'on simple),
+con macros en lugar de variables para que el compilador pliegue las constantes y la ISR sea corta.
+
+\subsection{La interrupci\'on principal (n\'ucleo del HIL)}
+\begin{lstlisting}[language=C,caption={ISR del Timer0, cada 10 us: ADC $\rightarrow$ PID $\rightarrow$ planta $\rightarrow$ DAC.}]
+__interrupt void cpu_timer0_isr(void)
+{
+    // 1) Leer ADC: convierte lo que el DAC dejo en el pin
+    AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1;
+    AdcaRegs.ADCSOCFRC1.bit.SOC0 = 1;                 // disparo por software
+    volatile int timeout = 1000;
+    while ((AdcaRegs.ADCINTFLG.bit.ADCINT1 == 0) && (timeout > 0)) timeout--;
+    if (timeout == 0) adc_timeouts++;                 // debe ser 0
+    AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1;
+
+    // 2) Codigo -> angulo medido, con calibracion
+    Uint16 adc_raw = AdcaResultRegs.ADCRESULT0;
+    theta_measured = THETA_MIN + (((float)adc_raw - ADC_CAL_B)*ADC_CAL_INV_M)*THETA_PER_LSB;
+
+    // 3) PID
+    float error = 0.0f - theta_measured;
+    error_integral += error*Ts;
+    if (error_integral >  2.0f) error_integral =  2.0f;     // anti-windup
+    if (error_integral < -2.0f) error_integral = -2.0f;
+
+    contador_derivada++;
+    if (contador_derivada >= 1000) {                        // cada 10 ms
+        theta_dot_meas  = (theta_measured - theta_prev_slow)/0.01f;
+        theta_prev_slow = theta_measured;
+        contador_derivada = 0;
+        theta_dot_filt  = (1.0f-0.386f)*theta_dot_filt + 0.386f*theta_dot_meas;
+    }
+    u = (KP*error) - (KD*theta_dot_filt) + (KI*error_integral);
+    if (u > U_MAX) u = U_MAX;
+    if (u < U_MIN) u = U_MIN;
+
+    // 4) Planta (Euler-Cromer)
+    float theta_dot_new = theta_dot + Ts*(gL*theta - (b_fric*invJ*theta_dot) + invJ*u);
+    float theta_new     = theta + Ts*theta_dot_new;
+    if (theta_new > THETA_MAX) theta_new = THETA_MAX;
+    if (theta_new < THETA_MIN) theta_new = THETA_MIN;
+    theta = theta_new;  theta_dot = theta_dot_new;
+
+    // 5) Angulo -> codigo DAC (lazo de vuelta), con redondeo
+    float theta_frac = (theta - THETA_MIN)/(THETA_MAX-THETA_MIN);
+    if (theta_frac < 0.0f) theta_frac = 0.0f;
+    if (theta_frac > 1.0f) theta_frac = 1.0f;
+    dac_code = (Uint16)(theta_frac*4095.0f + 0.5f);
+    DacbRegs.DACVALS.all = dac_code;
+    ...
+    PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
+}
+\end{lstlisting}
+\paragraph{Lectura paso a paso.}
+\begin{enumerate}[leftmargin=1.6em]
+\item \emph{Lectura del ADC por software.} \texttt{ADCSOCFRC1} fuerza el inicio de conversi\'on y se
+espera la bandera \texttt{ADCINT1}. El \emph{timeout} protege contra un bloqueo y \texttt{adc\_timeouts}
+cuenta los fallos: en las pruebas es $0$.
+\item \emph{Conversi\'on a \'angulo.} Aqu\'i act\'ua la calibraci\'on $B$/$M$: se resta el offset medido del lazo
+DAC$\rightarrow$ADC antes de escalar.
+\item \emph{PID.} El orden importa para la comparaci\'on con MATLAB: integral $\rightarrow$ derivada (cada
+1000 ISR) $\rightarrow$ $u$ con saturaci\'on. La derivada filtrada $\hat\omega$ s\'olo cambia cada 10~ms.
+\item \emph{Planta.} Se usa $u$ reci\'en calculado (sin retardo de c\'omputo: la planta es simulada).
+\item \emph{DAC.} La salida se limita a $[0,1]$ antes de convertir a c\'odigo para no desbordar el
+\texttt{Uint16}.
+\end{enumerate}
+
+\subsection{Configuraci\'on de ADC, DAC y Timer}
+\begin{lstlisting}[language=C,caption={Inicializaci\'on de perif\'ericos (extracto).}]
+// ADC-A: canal A0 (pin 30) = theta
+CpuSysRegs.PCLKCR13.bit.ADC_A = 1;
+AdcaRegs.ADCCTL2.bit.PRESCALE = 6;
+AdcSetMode(ADC_ADCA, ADC_RESOLUTION_12BIT, ADC_SIGNALMODE_SINGLE); // carga trims
+AdcaRegs.ADCSOC0CTL.bit.CHSEL   = 0;     // ADCINA0
+AdcaRegs.ADCSOC0CTL.bit.ACQPS   = 14;    // ventana de adquisicion
+AdcaRegs.ADCSOC0CTL.bit.TRIGSEL = 0;     // solo por software
+AdcaRegs.ADCINTSEL1N2.bit.INT1SEL = 0;   // ADCINT1 = fin de SOC0
+AdcaRegs.ADCINTSEL1N2.bit.INT1E   = 1;
+// DAC-B (pin 70) con referencia VREFHI
+DacbRegs.DACCTL.bit.DACREFSEL = 1;
+DacbRegs.DACOUTEN.bit.DACOUTEN = 1;
+// Timer0: ISR cada 10 us (200 MHz -> 2000 ciclos)
+ConfigCpuTimer(&CpuTimer0, 200, 10);
+\end{lstlisting}
+\texttt{AdcSetMode()} carga los \emph{trims} de offset del ADC grabados de f\'abrica (necesario para
+12 bits seg\'un la errata del dispositivo); sin \'el, el offset es mayor y menos repetible. El valor de
+\texttt{ACQPS} no se ha caracterizado experimentalmente: para el canal del potenci\'ometro depende de su
+impedancia de fuente y queda como punto a verificar.
+
+\subsection{Arranque limpio y trigger}
+La corrida empieza cuando Python env\'ia el car\'acter \texttt{'S'}. La funci\'on \texttt{ResetEstado()} pone
+todo el estado en su condici\'on inicial \emph{y} deja el DAC en el c\'odigo de $\theta_0$, de modo que la
+primera lectura del ADC ya vea $0.1$~rad:
+\begin{lstlisting}[language=C,caption={Arranque coherente con la condici\'on inicial.}]
+theta = THETA_INIT;  theta_dot = 0.0f;  theta_prev_slow = THETA_INIT;
+theta_dot_filt = 0.0f;  error_integral = 0.0f;  contador_derivada = 0;
+dac_code = (Uint16)(((THETA_INIT-THETA_MIN)/THETA_RANGE)*4095.0f + 0.5f);
+DacbRegs.DACVALS.all = dac_code;
+DELAY_US(200);                       // deja asentar la salida del DAC
+\end{lstlisting}
+Esta correcci\'on elimin\'o un salto falso de la derivada ($+2.96$~rad/s en la primera trama del firmware
+anterior, cuando el DAC arrancaba en 2048, es decir en $\theta=0$).
+
+\subsection{Telemetr\'ia sin \texttt{sprintf}}
+El 'int' del C28x es de 16 bits y \texttt{sprintf} provoc\'o un flujo infinito de caracteres '9' que
+imped\'ia terminar la primera trama. Se sustituy\'o por un formateador propio que usa solo restas de
+potencias de diez:
+\begin{lstlisting}[language=C,caption={Formateador entero$\rightarrow$texto y conversi\'on a mrad saturada.}]
+static long to_milli(float x){                  // mrad redondeado, saturado a +-999999
+    float y = x*1000.0f;
+    if (!(y == y)) return 0L;                   // NaN
+    if (y >  999999.0f) y =  999999.0f;
+    if (y < -999999.0f) y = -999999.0f;
+    return (long)(y + ((y >= 0.0f) ? 0.5f : -0.5f));
+}
+static int fmt_long(char *p, long v){
+    static const unsigned long pot[7] = {1000000UL,100000UL,10000UL,1000UL,100UL,10UL,1UL};
+    unsigned long a; int n=0,k,started=0;
+    if (v < 0) { p[n++]='-'; a=(unsigned long)(-v); } else a=(unsigned long)v;
+    for (k=0;k<7;k++){ int d=0; while(a>=pot[k]){a-=pot[k];d++;}
+        if (d!=0 || started || k==6){ p[n++]=(char)('0'+d); started=1; } }
+    return n;
+}
+\end{lstlisting}
+La l\'inea resultante (\texttt{pos\_mrad,vel\_mrad/s,u\_milli[,pert\_milli]}) cabe en $\approx$25--37 caracteres:
+a 115\,741~baud ($\approx86\,\mu$s por car\'acter de 10 bits) son menos de 3.2~ms, bien por debajo de los 10~ms
+entre tramas.
+
+\espacioimagen{watch_variables.png}{Vista \emph{Watch} de Code Composer Studio durante una corrida.}
+{Captura con \texttt{sysclk\_mhz\_reg}=200, \texttt{isr\_overruns}=0, \texttt{adc\_timeouts}=0, \texttt{start\_flag}=1, \texttt{pot\_raw}, etc.}
+
+\subsection{Etapa con perturbaci\'on}
+La perturbaci\'on $d$ entra a la planta sumada al control: \texttt{invJ*(u + pert\_filt)}. Hay tres modos:
+0 sin perturbaci\'on, 1 potenci\'ometro y 2 escal\'on programado (repetible, para comparar con MATLAB).
+
+\paragraph{Lectura del potenci\'ometro sin penalizar el lazo.} El canal del potenci\'ometro (ADCINA2, pin~29)
+usa un segundo SOC. Se lee a 100~Hz (no a 100~kHz), \emph{desfasado} 5~ms de la derivada y la telemetr\'ia para no
+alargar la ISR m\'as pesada. SOC0 ($\theta$) tiene prioridad alta y la ISR espera \emph{ambas} banderas antes de leer
+resultados: sin ello, con prioridad por turnos podr\'ia convertirse primero SOC1 y retrasar la lectura de $\theta$.
+\begin{lstlisting}[language=C,caption={Conversi\'on del potenci\'ometro a perturbaci\'on (zona muerta, escala sim\'etrica, filtro).}]
+static float pot_a_pert(Uint16 raw){
+    float x = (float)((int)raw - POT_CENTRO);
+    if      (x >  (float)POT_ZONA_MUERTA) x -= (float)POT_ZONA_MUERTA;  // continuidad
+    else if (x < -(float)POT_ZONA_MUERTA) x += (float)POT_ZONA_MUERTA;
+    else                                  x  = 0.0f;                    // zona muerta
+    x = x / (float)(POT_RECORRIDO - POT_ZONA_MUERTA);                   // escala simetrica
+    if (x >  1.0f) x =  1.0f;
+    if (x < -1.0f) x = -1.0f;
+    return x * PERT_MAX;                                                // +-0.5
+}
+...
+if (leer_pot) {
+    pot_raw  = AdcaResultRegs.ADCRESULT1;
+    pert_cmd = pot_a_pert(pot_raw);
+    pert_filt = (1.0f - POT_ALFA)*pert_filt + POT_ALFA*pert_cmd;   // IIR a 100 Hz
+}
+\end{lstlisting}
+\begin{itemize}[leftmargin=1.6em]
+\item \emph{Zona muerta de 30 c\'odigos con continuidad:} el potenci\'ometro nunca queda exactamente en el
+centro; la zona muerta garantiza $d=0$ con el mando ``en reposo'' y, al restar el ancho de la zona fuera de ella,
+$d$ no da un salto al salir.
+\item \emph{Escala sim\'etrica} (mismo recorrido a ambos lados) para que $+d$ y $-d$ sean comparables.
+\item \emph{Filtro IIR} con $\alpha=0.386$ a 100~Hz ($f_c\approx$10~Hz): suaviza el ruido del potenci\'ometro y los
+saltos del mando sin atenuar las perturbaciones relevantes (la din\'amica del lazo est\'a en $\sim$5~Hz).
+\item \emph{Calibraci\'on:} el acumulador que estima el offset ($\theta$ medio, \texttt{b\_sugerido}) s\'olo es
+v\'alido con $d=0$ y se reinicia cuando hay perturbaci\'on activa.
+\end{itemize}
+
+% =============================================================================
+\section{An\'alisis en MATLAB: dise\~no y justificaci\'on}\label{sec:matlab}
+% =============================================================================
+\subsection{Idea general}
+MATLAB reproduce \emph{el mismo algoritmo discreto} que corre en el DSP, con el mismo $T_s$, el mismo orden de
+operaciones y las mismas constantes, y lo alimenta con los mismos datos de entrada. Despu\'es compara
+$\theta$, $\hat\omega$ y $u$ contra la telemetr\'ia del DSP.
+
+\paragraph{Por qu\'e simular el algoritmo discreto y no resolver la ecuaci\'on continua (\texttt{ode45}).}
+El objetivo es validar \emph{la implementaci\'on}. Si se compara contra la soluci\'on continua, cualquier
+discrepancia mezclar\'ia (i) error de discretizaci\'on, (ii) diferencias de implementaci\'on y (iii) efectos del hardware,
+sin poder separarlas. Con el mismo esquema discreto, (i) y (ii) quedan eliminados y la diferencia restante
+se atribuye al hardware: cuantizaci\'on del ADC/DAC, redondeo de la telemetr\'ia y temporizaci\'on.
+
+\subsection{Decisiones de dise\~no del script y su justificaci\'on}
+Cada decisi\'on responde a una fuente concreta de falsa discrepancia que se encontr\'o en versiones previas:
+\begin{enumerate}[leftmargin=1.6em]
+\item \textbf{Condiciones iniciales del firmware, no de la primera fila del CSV.}
+$\theta=0.1$, $\omega=0$, $\theta_{\mathrm{prev}}=0.1$, $\hat\omega=0$, integral $=0$. La columna ``Velocidad'' del
+CSV es $\hat\omega$ (derivada \emph{filtrada de la medici\'on}), no la velocidad real de la planta: usarla como
+$\omega_0$ inyectaba $+2.96$~rad/s falsos.
+\item \textbf{``Velocidad'' simulada $=\hat\omega$.} El DSP registra $\hat\omega$; comparar contra $\omega$ real
+ser\'ia comparar magnitudes distintas (con distinto retardo y filtrado).
+\item \textbf{Alineaci\'on temporal.} La fila $k$ del CSV es el estado tras $k\cdot10$~ms. Se simula desde $t=0$
+con 1000 pasos de 10~$\mu$s por fila; si se arrancara en la fila 1, todo quedar\'ia corrido 10~ms y el transitorio
+(que cambia r\'apido) producir\'ia errores grandes artificiales.
+\item \textbf{Redondeo a mrad} (\texttt{round(x*1000)/1000}), igual que \texttt{to\_milli} del firmware, para
+comparar peras con peras: el DSP s\'olo transmite 1~mrad de resoluci\'on.
+\item \textbf{M\'etricas separadas por r\'egimen.} Transitorio ($t\le0.6$~s) y r\'egimen ($t\ge2$~s) tienen causas de error
+distintas (condiciones iniciales vs.\ cuantizaci\'on); un \'unico RMS global las mezclar\'ia y ocultar\'ia cu\'al falla.
+\item \textbf{RMS en lugar de error m\'aximo:} el RMS resume todo el registro y es poco sensible a una sola muestra
+cuantizada; el pico se reporta aparte.
+\end{enumerate}
+
+\begin{lstlisting}[language=matlabx,caption={Lazo de simulaci\'on en MATLAB (misma estructura que la ISR).}]
+N_SUB = 1000;                          % 1000 ISR por fila del CSV
+for k = 1:N
+  for sub = 1:N_SUB
+    theta_measured = theta;            % lazo calibrado: sin offset
+    error = 0 - theta_measured;
+    error_integral = max(min(error_integral + error*Ts, 2), -2);
+
+    contador_derivada = contador_derivada + 1;
+    if contador_derivada >= 1000
+      theta_dot_meas  = (theta_measured - theta_prev_slow)/0.01;
+      theta_prev_slow = theta_measured;
+      contador_derivada = 0;
+      theta_dot_filt  = 0.614*theta_dot_filt + 0.386*theta_dot_meas;
+    end
+    u = KP*error - KD*theta_dot_filt + KI*error_integral;
+    u = max(min(u, U_MAX), U_MIN);
+
+    theta_dot_new = theta_dot + Ts*(gL*theta - b_fric*invJ*theta_dot + invJ*(u + d));
+    theta_new = max(min(theta + Ts*theta_dot_new, THETA_MAX), THETA_MIN);
+    theta = theta_new;  theta_dot = theta_dot_new;
+  end
+  pos_sim(k) = theta;  vel_sim(k) = theta_dot_filt;  u_sim(k) = u;
+end
+\end{lstlisting}
+
+\subsection{Inyecci\'on de la perturbaci\'on medida}
+Con el potenci\'ometro, $d(t)$ no es repetible. En vez de intentar reproducirla, el DSP \emph{registra} la
+perturbaci\'on que realmente entr\'o a la planta (cuarta columna, ya filtrada) y MATLAB la usa como entrada
+\emph{instante a instante}. As\'i ambos lazos reciben exactamente la misma excitaci\'on, y la comparaci\'on es
+v\'alida aunque la perturbaci\'on sea arbitraria. Dos detalles lo hacen exacto:
+\begin{itemize}[leftmargin=1.6em]
+\item \textbf{Fase de 5~ms.} El DSP actualiza $d$ a la mitad de cada intervalo de telemetr\'ia. La fila $k$ trae el $d$
+que entr\'o en la segunda mitad del intervalo $k$; en la primera mitad estaba vigente $d(k-1)$. El script lo replica
+(\texttt{usar\_fase\_5ms}).
+\item \textbf{Resoluci\'on.} $d$ se transmite redondeada a $10^{-3}$, de ah\'i un error de entrada de hasta
+$0.5\times10^{-3}$.
+\end{itemize}
+\begin{lstlisting}[language=matlabx,caption={Perturbaci\'on vigente en cada paso.}]
+if usar_fase_5ms
+    if k > 1 && sub <= 500, d = d_dsp(k-1); else, d = d_dsp(k); end
+else
+    d = d_dsp(k);
+end
+\end{lstlisting}
+
+\subsection{Verificaci\'on del rechazo: tramos de $d$ constante}
+La teor\'ia predice $u+d\to0$ y $\theta\to0$ en cada tramo con $d$ constante. El script detecta tramos de
+$\ge3$~s con $|d|$ casi constante y promedia los \'ultimos 1.5~s (cuando el transitorio ya pas\'o):
+\begin{lstlisting}[language=matlabx,caption={Detecci\'on de tramos con perturbaci\'on constante.}]
+while j < N && abs(d_dsp(j+1) - d_dsp(i)) < 0.01, j = j + 1; end
+if t_dsp(j) - t_dsp(i) >= 3.0
+    w = max(i, j-150):j;                       % ultimos 1.5 s del tramo
+    fprintf(..., mean(d_dsp(w)), mean(pos_dsp(w))*1e3, mean(u_dsp(w)), ...
+            mean(u_dsp(w)) + mean(d_dsp(w)));
+end
+\end{lstlisting}
+Se mira $u+d$ y no $u$ solo porque $u+d$ es el par neto que ve la planta: debe ser $\approx0$ (cancelaci\'on
+exacta). Es la prueba directa de que el integrador est\'a funcionando.
+
+\subsection{Prueba de la hip\'otesis del arranque}
+En las capturas con perturbaci\'on, la primera velocidad filtrada del DSP sale $\approx-2.0$~rad/s cuando el
+modelo da $\approx-0.1$~rad/s. Para probar si ese valor explica el transitorio, la opci\'on
+\texttt{derivada\_inicial\_csv} reemplaza $\theta_{\mathrm{prev}}$ por el valor que reproduce \emph{esa} primera velocidad:
+\begin{lstlisting}[language=matlabx,caption={Replicar el arranque observado de la derivada.}]
+if derivada_inicial_csv && primera_derivada
+    theta_prev_slow = theta_measured - vel_dsp(1)*0.01/0.386;
+end
+\end{lstlisting}
+Despejando de la ec.~\eqref{eq:iir} con $\hat\omega_0=0$: $\hat\omega_1=\alpha\,(\theta_1-\theta_{\mathrm{prev}})/0.01$,
+de donde sale la expresi\'on del c\'odigo. Es una prueba de \emph{consistencia} (si reproduce el transitorio, la
+hip\'otesis es plausible); no demuestra por s\'i sola la causa en el hardware, que se confirma leyendo
+\texttt{adc\_first[]} y \texttt{theta\_prev\_inicial} en \emph{Watch}.
+
+\espacioimagen{matlab_sin_perturbacion.png}{Comparaci\'on DSP vs MATLAB sin perturbaci\'on.}
+{Figura de tres paneles ($\theta$, $\hat\omega$, $u$) de \texttt{comparacion\_sin\_perturbacion.m}, DSP en azul y MATLAB en rojo discontinuo, m\'as el zoom 0--1~s.}
+
+\espacioimagen{matlab_con_perturbacion.png}{Comparaci\'on DSP vs MATLAB con perturbaci\'on.}
+{Figura de cuatro paneles ($\theta$, $\hat\omega$, $u$, $d$) de \texttt{comparacion\_con\_perturbacion.m}.}
+
+% =============================================================================
+\section{Resultados y discusi\'on}\label{sec:resultados}
+% =============================================================================
+\subsection{Hallazgos de diagn\'ostico del banco}
+\begin{itemize}[leftmargin=1.6em]
+\item \textbf{Reloj.} Sin el s\'imbolo \texttt{\_LAUNCHXL\_F28379D} a nivel de proyecto el DSP corr\'ia a
+100~MHz (no 200): el Timer0 y la UART quedaban a otra escala. Se verific\'o leyendo
+\texttt{sysclk\_mhz\_reg}$=200$ en \emph{Watch}.
+\item \textbf{Offset DAC$\rightarrow$ADC.} Cambia con la configuraci\'on de reloj/ADC: $-17.6$~LSB a 100~MHz y
+$+6.6$~LSB a 200~MHz. La causa del cambio no se ha verificado. La calibraci\'on por software
+(\texttt{ADC\_CAL\_B}$=6.1$) deja un error estacionario de $0.2$--$0.5$~mrad.
+\item \textbf{Telemetr\'ia.} El flujo infinito de '9' se eliminó sustituyendo \texttt{sprintf} por \texttt{fmt\_long}.
+\item \textbf{Arranque de la derivada.} El firmware anterior arrancaba con el DAC en 2048 ($\theta=0$) y la primera
+velocidad sal\'ia $+2.96$~rad/s; se corrigi\'o con \texttt{ResetEstado()}. En el firmware con perturbaci\'on persiste un
+artefacto menor (primera velocidad $\approx-2.0$~rad/s) cuya causa en la tarjeta sigue por confirmar.
+\end{itemize}
+
+\subsection{Sin perturbaci\'on}
+Con el firmware calibrado, en r\'egimen ($t\ge2$~s) la media de $\theta$ medida en una corrida de 20~s fue
+$+0.65$~mrad con desviaci\'on est\'andar $0.48$~mrad (capturada con una versi\'on anterior del arranque).
+Ambos valores son del orden de 1 LSB ($0.767$~mrad) y de la resoluci\'on de la telemetr\'ia (1~mrad): el lazo
+sostiene el p\'endulo en la vertical con un error comparable al del convertidor. La simulaci\'on ideal predice
+rebasamiento de $\approx-32$~mrad en $t=0.12$~s y asentamiento a $\pm2$~mrad en $\approx0.57$~s.
+
+\subsection{Con perturbaci\'on}
+Corrida de 90~s con el potenci\'ometro moviendo $d$ entre $-0.5$ y $+0.5$. Resultados de la comparaci\'on:
+\begin{table}[H]\centering\small
+\begin{tabular}{@{}lccc@{}}\toprule
+Segmento & RMS $\theta$ (mrad) & RMS $\hat\omega$ (rad/s) & RMS $u$ \\ \midrule
+Total & 1.27 & 0.0383 & 0.0080 \\
+Transitorio ($t\le0.6$ s) & 8.03 & 0.3263 & 0.0659 \\
+Resto ($t\ge2$ s) & 1.09 & 0.0277 & 0.0060 \\ \bottomrule
+\end{tabular}
+\caption{Error RMS (DSP $-$ MATLAB) con la perturbaci\'on medida como entrada.}
+\end{table}
+\begin{itemize}[leftmargin=1.6em]
+\item \textbf{Picos:} DSP $+167/-95$~mrad contra MATLAB $+169/-93$~mrad (diferencias de 2~mrad $\approx$ 2.6~LSB).
+\item \textbf{Error en r\'egimen:} 1.09~mrad RMS, del orden de la resoluci\'on de la telemetr\'ia. El modelo
+lineal reproduce la respuesta del DSP a una perturbaci\'on arbitraria.
+\item \textbf{Transitorio inicial} (8.03~mrad): es la \'unica zona donde persiste una diferencia. La hip\'otesis del
+arranque la explica en simulaci\'on (el RMS baja de 8.07 a $\approx1.0$~mrad al reproducir la primera velocidad
+observada), pero \textbf{falta confirmarla en la tarjeta}.
+\end{itemize}
+
+\paragraph{Rechazo de la perturbaci\'on (tramos de $d$ constante).}
+\begin{table}[H]\centering\small
+\begin{tabular}{@{}rrrrrr@{}}\toprule
+$t_{ini}$ (s) & $t_{fin}$ (s) & $d$ & $\theta$ (mrad) & $u$ & $u+d$ \\ \midrule
+0.0 & 4.9 & $+0.000$ & $-1.03$ & $+0.000$ & $+0.0004$ \\
+8.3 & 18.1 & $+0.500$ & $+1.26$ & $-0.500$ & $-0.0007$ \\
+21.6 & 31.8 & $-0.313$ & $-2.21$ & $+0.314$ & $+0.0007$ \\
+32.4 & 37.5 & $-0.500$ & $-6.43$ & $+0.502$ & $+0.0025$ \\
+38.8 & 49.4 & $+0.500$ & $+1.91$ & $-0.501$ & $-0.0008$ \\
+53.0 & 68.4 & $+0.003$ & $-0.95$ & $-0.003$ & $+0.0005$ \\
+68.9 & 86.6 & $+0.498$ & $-1.23$ & $-0.498$ & $-0.0002$ \\ \bottomrule
+\end{tabular}
+\caption{Promedios de los \'ultimos 1.5~s de cada tramo con $d$ constante ($\ge3$~s).}
+\end{table}
+El par neto $u+d$ queda entre $-0.0008$ y $+0.0025$ en todos los tramos: el integrador cancela la perturbaci\'on con
+un error menor a 0.5\,\% de $d_{\max}$, y $\theta$ regresa a $\approx0$ (compare con los 106~mrad que dar\'ia un
+controlador sin integral para $d=0.5$). El \'unico tramo con $\theta$ notable ($-6.4$~mrad, $d=-0.5$) dur\'o
+5.1~s; la simulaci\'on indica que el asentamiento a $\pm2$~mrad ante $d=0.5$ tarda $\approx9$~s (consecuencia del
+polo lento en $-0.43$), de modo que lo m\'as probable es que no hubiera terminado de asentarse. Es una explicaci\'on
+plausible, pendiente de comprobar sosteniendo $d=-0.5$ durante 15~s o m\'as.
+
+\paragraph{Saturaci\'on.} Con $|u|_{\max}=0.61$ frente al l\'imite de 10, \texttt{u\_sat\_count} no es relevante:
+el anti-windup no se activa en estas pruebas, y la hip\'otesis de linealidad del modelo se sostiene.
+
+\espacioimagen{zoom_transitorio.png}{Zoom al transitorio inicial (0--1 s).}
+{Superposici\'on DSP/MATLAB mostrando el rebasamiento (DSP $\approx-25$ mrad, MATLAB $\approx-32$ mrad) y su acuerdo despu\'es de $\approx0.4$~s.}
+
+\espacioimagen{rechazo_perturbacion.png}{Rechazo de perturbaci\'on en tramos constantes.}
+{$\theta(t)$, $u(t)$ y $d(t)$ de la corrida de 90~s, con los tramos de $d$ constante resaltados.}
+
+\subsection{Discusi\'on}
+\begin{itemize}[leftmargin=1.6em]
+\item El \textbf{modelo y el PID quedan validados} en el sentido HIL: el DSP reproduce, con diferencias del orden de
+la resoluci\'on de los convertidores, la ley de control simulada, tanto sin perturbaci\'on como con una perturbaci\'on
+arbitraria medida.
+\item Las propiedades predichas por la teor\'ia aparecen en los datos: cancelaci\'on exacta de $d$ ($u+d\approx0$),
+linealidad del pico con $d$, y el error estacionario por offset del ADC ($\theta_{\mathrm{real}}=-\delta\cdot0.767$~mrad).
+\item El \textbf{amortiguamiento} del par dominante es bajo ($\zeta\approx0.3$--0.4, margen de fase $\approx22^\circ$).
+La decisi\'on de modificarlo ---por ejemplo, aumentar $K_D$ o mejorar la derivada--- queda para una discusi\'on
+posterior; este documento s\'olo muestra c\'omo se vincula con el filtrado y el retardo de la derivada.
+\end{itemize}
+
+\subsection{Limitaciones y pendientes}
+\begin{itemize}[leftmargin=1.6em]
+\item Confirmar en la tarjeta la causa del artefacto de arranque (\texttt{adc\_first[]}, \texttt{theta\_prev\_inicial}).
+\item Captura con escal\'on programado (\texttt{MODO\_PERT}=2) para comparar con una entrada repetible.
+\item Margen de ciclos de la ISR (\texttt{isr\_max\_cycles}, l\'imite 2000): medido entre 1378 y 1578 ciclos a 200~MHz, sin \emph{overruns} (capturas del 1 de noviembre y corridas con autocalibraci\'on).
+\item Verificar \texttt{ACQPS} del canal del potenci\'ometro seg\'un su impedancia de fuente.
+\item Causa del cambio de offset con el reloj: sin determinar. La autocalibraci\'on lo mide y compensa en cada arranque (18 corridas en 3 arranques, dentro de $\pm0.4$~mrad).
+\item El an\'alisis de m\'argenes usa un modelo aproximado del controlador h\'ibrido; no es una identificaci\'on experimental.
+\end{itemize}
+
+% =============================================================================
+\appendix
+\section{Variables de inspecci\'on en \emph{Watch}}
+% =============================================================================
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}l X@{}}\toprule
+Variable & Qu\'e indica \\ \midrule
+\texttt{sysclk\_mhz\_reg} & SYSCLK le\'ido de los registros del PLL (debe ser 200). \\
+\texttt{isr\_max\_cycles} & Ciclos m\'aximos de la ISR; l\'imite 2000 (10 $\mu$s a 200 MHz). \\
+\texttt{isr\_overruns} & Veces que la ISR dur\'o m\'as de 10 $\mu$s (debe ser 0). \\
+\texttt{adc\_timeouts} & Conversiones que no terminaron a tiempo (debe ser 0). \\
+\texttt{offset\_lsb} & Media de (ADC $-$ DAC) en LSB: offset del lazo f\'isico. \\
+\texttt{theta\_mean\_acc} & Media de $\theta$ real en 10~s (error estacionario). \\
+\texttt{b\_sugerido} & Valor sugerido de \texttt{ADC\_CAL\_B}. \\
+\texttt{pot\_raw} & C\'odigo crudo del potenci\'ometro (para fijar el centro). \\
+\texttt{tx\_frames} & Tramas UART enviadas ($\approx100$/s). \\
+\texttt{u\_sat\_count} & Veces que $u$ lleg\'o a saturar. \\
+\texttt{adc\_first[8]}, \texttt{theta\_prev\_inicial} & Diagn\'ostico del arranque de la derivada. \\ \bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Script para polos, m\'argenes y figura de la secci\'on 3}
+\begin{lstlisting}[language=matlabx,caption={C\'alculo de polos y m\'argenes (requiere Control System Toolbox para \texttt{margin}).}]
+g=9.81; L=0.3; m=0.1; b=0.005; J=m*L^2;
+KP=5; KI=2; KD=0.15; tau=0.0205; Td=0.005;
+s = tf('s');
+G = (1/J)/(s^2 + (b/J)*s - g/L);
+C = KP + KI/s + KD*s/(tau*s+1)*exp(-Td*s);
+Lazo = G*C;
+roots([1, (b+KD)/J, KP/J - g/L, KI/J])      % polos con derivada ideal
+[Gm,Pm,Wcg,Wcp] = margin(Lazo)             % margenes (el lazo es inestable en OL)
+pole(feedback(Lazo,1))                      % polos de lazo cerrado (con retardo)
+figure; bode(Lazo); grid on;
+figure; nyquist(Lazo); grid on;
+\end{lstlisting}
+Nota: \texttt{margin} devuelve el margen de ganancia m\'as cercano; con una planta inestable conviene revisar el
+diagrama de Nyquist para interpretar si es un margen superior o inferior.
+
+\end{document}

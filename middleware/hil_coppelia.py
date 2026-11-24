@@ -1,6 +1,6 @@
 # ============================================================
 # Middleware HIL: DSP (TMS320F28379D) <-> CoppeliaSim   (v2)
-# Compatible con control_hil_v3.c  (USE_TRIGGER = 1)
+# Compatible con control_hil_sin_perturbacion.c  (USE_TRIGGER = 1)
 #
 # Protocolo (sin cambios):
 #   Python -> DSP : el byte 'S' (arranca el control)

@@ -1,0 +1,670 @@
+\documentclass[12pt,letterpaper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs,tabularx,array}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds,calc}
+\usepackage[hidelinks]{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{etoolbox}\AtBeginDocument{\shorthandoff{<>}}
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,frame=single,columns=fullflexible,keepspaces=true,showstringspaces=false}
+\newcommand{\pendiente}[1]{\textbf{[PENDIENTE: #1]}}
+\renewcommand{\arraystretch}{1.15}\emergencystretch=3em
+\def\UrlBreaks{\do\/\do\-\do\_\do\.\do\=\do\?}\Urlmuskip=0mu plus 2mu
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+\tikzset{
+  caja/.style={draw,rounded corners=2pt,align=center,font=\small,inner sep=4pt,text width=3.1cm,minimum height=1.1cm,fill=gray!8},
+  fija/.style={draw,rounded corners=2pt,align=center,font=\small,inner sep=4pt,text width=3.1cm,minimum height=1.1cm,fill=blue!8},
+  flecha/.style={-{Stealth[length=2.2mm]},thick}
+}
+
+
+\begin{document}
+\thispagestyle{empty}
+\begin{center}
+\includegraphics[scale=0.6]{Imagenes/UTM.png}
+\end{center}
+
+\begin{Large}
+	\begin{center}
+		\textbf{UNIVERSIDAD TECNOLÓGICA DE LA MIXTECA}\\
+	\end{center}
+\end{Large}
+
+\begin{Large}
+	\newlength{\longTitulo}
+	\settowidth{\longTitulo}{\textbf{xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}}
+	\begin{center}
+		\rule{\longTitulo}{.15mm}
+		\vskip 0.5cm
+		{\textbf{Configuración de modelos desde la interfaz gráfica: factibilidad y estructura}}\\
+        \vskip 0.3cm
+        {\large Reporte de diseño complementario\\ Borrador 0.2 para revisión del director}\\
+        \vskip 0.05cm
+		\rule{\longTitulo}{.15mm}\\
+	\end{center}
+\end{Large}
+
+\begin{center}
+	{\normalsize Proyecto de tesis: ``Desarrollo de una plataforma modular \textit{Hardware in the Loop} (HIL) para la emulación de sistemas de control''}
+\end{center}
+\vfill
+
+\begin{center}{
+ \textbf{Para obtener el grado de:}\\\vspace{0.2cm}
+        {Maestría en Robótica}\vspace{0.2cm}\\}
+\end{center}
+
+\begin{center}{
+    \textbf{Presenta:}\\\vspace{0.2cm}
+    {Ing. Eduardo Pascual Pérez}\vspace{0.2cm}\\}
+\end{center}
+
+\begin{center}
+    {\textbf{Director:}\\\vspace{0.2cm}
+    Dr. Fermín Hugo Ramírez Leyva\vspace{0.2cm}\\}
+\end{center}
+
+\begin{center}
+    {\textbf{Codirector:}\\\vspace{0.2cm}
+   M.C. Felipe Santiago Espinosa\vspace{0.2cm}\\}
+\end{center}
+
+\begin{center}
+    \vspace{0.4cm}
+	{Huajuapan de León, Oaxaca a \text{\today}}
+\end{center}
+\clearpage
+
+
+\tableofcontents\clearpage
+
+\section*{Cambios respecto a la versión 0.1 (decisiones adoptadas el 11 de noviembre de 2026)}
+\begin{itemize}
+    \item Las ``$K$'' de clase son \emph{ambas}: ganancias de PID y vector de realimentación de estados. El catálogo incluye los dos (Sección~\ref{sec:ctrl}).
+    \item El motor de CD y el robot diferencial aún no están especificados: la estructura de la interfaz los prevé como pestañas \emph{en definición} y se incluye una ficha para definirlos (Sección~\ref{sec:pestanas}).
+    \item El periodo $T_s$ no se escribe: se elige entre \emph{tres valores preestablecidos} por modelo (Sección~\ref{sec:ts}).
+    \item La interfaz se organiza en una pestaña por modelo más una pestaña para agregar modelos; hoy solo el péndulo tiene pruebas (Sección~\ref{sec:pestanas}).
+    \item Los parámetros físicos de la planta ($L$, $m$, $b$, \dots) son editables en los modelos fijos y, en los modelos nuevos, el usuario decide cuáles lo son (Sección~\ref{sec:paramfis}).
+    \item Se agrega una sección de hardware: caja con conexiones fijas y periféricos que el usuario activa desde la interfaz (Sección~\ref{sec:hw}).
+\end{itemize}
+
+\section{Punto de partida: qué es hoy configurable}
+
+El firmware del péndulo (versión 3) define casi todo como constante de compilación (\texttt{\#define}): el periodo $T_s$, las ganancias, los límites de la acción de control, los parámetros físicos, los baudios y la calibración del ADC. Dos cosas importan para este reporte:
+
+\begin{itemize}
+    \item Varios valores \emph{derivan} de otros y hoy están escritos a mano. Por ejemplo, la derivada se calcula cada 1000 pasos (10~ms) con un filtro cuyo coeficiente $\alpha=0.386$ corresponde a una frecuencia de corte de unos 10~Hz mediante $\alpha=\omega T/(1+\omega T)$, con $\omega=2\pi f_c$ y $T=10$~ms; la telemetría sale también cada 1000 pasos; el divisor de baudios se calcula a partir de $\mathrm{LSPCLK}$. Si el usuario cambia $T_s$ o $f_c$, esos números deben recalcularse; no pueden quedar fijos.
+    \item Hay valores que \emph{no deben} ser modificables por el usuario. El incremento 1 mostró que un reloj de 100~MHz en lugar de 200~MHz invalida el lazo y el enlace sin que el programa lo advierta.
+\end{itemize}
+Por eso el diseño no consiste solo en ``exponer variables'': consiste en decidir \emph{cuáles} se exponen, \emph{cuándo} se aplican y \emph{qué reglas} las validan.
+
+\section{Factibilidad}
+\label{sec:factibilidad}
+
+\subsection{Resumen}
+
+\begin{table}[!htbp]
+\centering
+\caption{Dictamen de factibilidad.}
+\label{tab:dictamen}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.1cm}>{\raggedright\arraybackslash}p{2.2cm}Y}
+\toprule
+\textbf{Capacidad} & \textbf{Factibilidad} & \textbf{Condición o límite} \\
+\midrule
+Editar ganancias, referencia y límites en los tres modelos precargados & Alta & Los valores pasan a variables; el costo en la interrupción debe medirse (prueba F8). \\
+Editar parámetros físicos de la planta ($L$, $m$, $b$, \dots) & Alta & Cada parámetro declara si es editable y su rango; los rangos deben mantener válido el periodo elegido. \\
+Elegir el periodo $T_s$ entre tres valores preestablecidos & Alta, con cota inferior & El presupuesto de ciclos de la interrupción fija un $T_s$ mínimo que depende del modelo. \\
+Editar los baudios & Media & Solo valores con error de divisor aceptable; además depende del adaptador USB (Tabla~\ref{tab:baud}). \\
+Activar y configurar perturbaciones & Alta & Cada modelo declara qué perturbaciones admite. \\
+Agregar modelos lineales (matrices) & Alta & Número de estados limitado por el presupuesto de ciclos y los convertidores. \\
+Agregar modelos no lineales (ecuaciones) & Media-alta & Lenguaje de expresiones restringido y validado; integradores explícitos. \\
+Agregar controladores propios & Fuera del alcance inicial & Se ofrece un catálogo parametrizado (P, PI, PID, realimentación de estados). \\
+Sistemas rígidos, retardos, eventos discretos, órdenes altos & No factible & No caben en el esquema de paso fijo con integración explícita en un núcleo. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Restricciones de la tarjeta que acotan el problema}
+
+\begin{enumerate}
+    \item \textbf{Presupuesto de tiempo.} La interrupción debe terminar antes de que llegue la siguiente. A $T_s=10~\mu$s son 2000 ciclos a 200~MHz; el péndulo ya consume una fracción grande de ese presupuesto \pendiente{confirmar los porcentajes del incremento 1 y el reloj al que corresponden}. Consecuencia: en un solo núcleo, $T_s$ solo puede \emph{subir} respecto al valor actual, y un modelo más complejo exige un $T_s$ mayor. Bajar $T_s$ requeriría repartir el trabajo entre núcleos, que es una etapa posterior.
+    \item \textbf{Convertidores.} El dispositivo tiene tres salidas DAC de 12 bits y cuatro módulos ADC. Cada variable que se cierre por convertidor ocupa un canal; por tanto, un modelo que cierre más de tres variables por DAC no es factible tal como está concebido el lazo. \pendiente{verificar cuántos canales DAC y ADC quedan accesibles en los conectores de la LaunchPad}
+    \item \textbf{Resolución.} Con 12 bits, una variable con rango $[a,b]$ se cuantiza en pasos de $(b-a)/4095$ (para el péndulo, 0.767~mrad). La interfaz debe mostrar esa resolución y advertir cuando sea comparable con la precisión que el usuario espera.
+    \item \textbf{Aritmética.} Los cálculos son de precisión simple. Hay unidad de punto flotante y también una unidad trigonométrica (TMU) que acelera seno y coseno, útil para el robot; su uso exige opciones de compilación específicas. \pendiente{confirmar las opciones del compilador y medir los ciclos de seno y coseno con y sin TMU}
+    \item \textbf{Ancho de banda del enlace.} A 115200 baudios entran unos 11\,500 bytes por segundo. Con tramas de 26, 34 y 50 bytes (3, 4 y 6 variables) el máximo teórico es de unos 440, 340 y 230 tramas por segundo; en la práctica menos. Cambiar los baudios o la tasa de telemetría requiere validar este límite.
+\end{enumerate}
+
+\subsection{Baudios: qué valores son realmente viables}
+
+El firmware calcula el divisor como $\mathrm{BRR}=\mathrm{round}(\mathrm{LSPCLK}/(8\cdot\mathrm{baud}))-1$. Como el divisor es entero, el baud real difiere del pedido. Con $\mathrm{LSPCLK}=50$~MHz, que es el caso actual, resulta:
+
+\begin{table}[!htbp]
+\centering
+\caption{Error de baudios según el divisor entero (calculado con la fórmula del firmware).}
+\label{tab:baud}
+\begin{tabular}{rrrr}
+\toprule
+\textbf{Baud pedido} & \textbf{BRR} & \textbf{Baud real} & \textbf{Error} \\
+\midrule
+9\,600 & 650 & 9\,601 & $+0.01$\kern.15em\relax\% \\
+57\,600 & 108 & 57\,339 & $-0.45$\kern.15em\relax\% \\
+115\,200 & 53 & 115\,741 & $+0.47$\kern.15em\relax\% \\
+230\,400 & 26 & 231\,481 & $+0.47$\kern.15em\relax\% \\
+460\,800 & 13 & 446\,429 & $-3.12$\kern.15em\relax\% \\
+921\,600 & 6 & 892\,857 & $-3.12$\kern.15em\relax\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Con una tolerancia de 2\kern.15em\relax\% (criterio propuesto, pendiente de justificar con referencia), la interfaz ofrecería 9\,600, 57\,600, 115\,200 y 230\,400 baudios y ocultaría 460\,800 y 921\,600 si el reloj de periféricos sigue en 50~MHz. La interfaz calcularía el divisor y mostraría el error, en lugar de pedirle al usuario un número. Que el adaptador USB de la tarjeta soporte 230\,400 baudios en ambos sentidos es algo por comprobar. \pendiente{prueba F11}
+
+\section{Qué puede modificar el usuario: ámbitos de un parámetro}
+\label{sec:ambitos}
+
+Un mismo parámetro puede cambiarse en momentos distintos. Se propone clasificar cada uno en un \emph{ámbito}, porque determina qué tan rápido es el ciclo de prueba y qué puede salir mal:
+
+\begin{table}[!htbp]
+\centering
+\caption{Ámbitos de un parámetro.}
+\label{tab:ambito}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.7cm}YY}
+\toprule
+\textbf{Ámbito} & \textbf{Cuándo se aplica} & \textbf{Ejemplos} \\
+\midrule
+\textbf{En línea} & Mientras corre la prueba, sin recompilar ni reiniciar (comando \texttt{W}). & Ganancias, referencia, límites de saturación, perturbación, frecuencia de corte del filtro. \\
+\textbf{De sesión} & Al reiniciar el estado de la planta (comando \texttt{Z}); sin recompilar. & $T_s$ (preestablecido), periodo de telemetría, condiciones iniciales, parámetros físicos de la planta, rangos de conversión. \\
+\textbf{De generación} & Exige regenerar, compilar y recargar (la interfaz lo hace con un botón). & Tipo de modelo y de controlador, integrador, baudios, variables de telemetría, canales. \\
+\textbf{Bloqueado} & No se ofrece al usuario. & Reloj (200~MHz), configuración fina del ADC, pines. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Por qué esta clasificación.} Para el estudiante que comprueba lo calculado en clase, lo más frecuente es cambiar ganancias: debe poder hacerlo sin ningún ciclo de carga. Lo menos frecuente (la estructura del modelo) puede costar unos segundos de compilación, que la interfaz oculta. Lo peligroso (el reloj) no se expone.
+
+\paragraph{Costo de hacer variables los parámetros.} Un parámetro que hoy es constante pasa a leerse de memoria dentro de la interrupción. En $x \leftarrow x + T_s f$ el producto sigue siendo una multiplicación, pero se añade una lectura. Las constantes derivadas (por ejemplo $g/L$ o $1/J$) se recalcularían \emph{fuera} de la interrupción, en el bucle principal, y se aplicarían entre ciclos para que la rutina nunca lea un valor a medio actualizar. El costo estimado es de pocos ciclos por parámetro; debe medirse con \texttt{isr\_max\_cycles} antes y después. \pendiente{prueba F8}
+
+\subsection{Parámetros comunes a todos los modelos}
+
+\begin{table}[!htbp]
+\centering
+\caption{Parámetros comunes.}
+\label{tab:comunes}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{1.9cm}Y}
+\toprule
+\textbf{Parámetro} & \textbf{Ámbito} & \textbf{Validación y comentario} \\
+\midrule
+Periodo $T_s$ & Sesión & Tres valores preestablecidos por modelo (Sección~\ref{sec:ts}), cada uno validado entre $T_{s,\min}$ (presupuesto de ciclos) y $T_{s,\max}$ (exactitud: $T_s\,|\lambda|_{\max}\le 0.1$, criterio propuesto). Al cambiarlo se recalculan decimaciones y coeficientes de filtro. \\
+Periodo de telemetría & Sesión & Múltiplo entero de $T_s$; debe caber en el ancho de banda (con margen). \\
+Variables de telemetría & Generación & Perfil del modelo; más variables, tramas más largas. \\
+Baudios & Generación & Solo los de error aceptable (Tabla~\ref{tab:baud}). \\
+Rango de cada variable convertida & Sesión & $a<b$; la simulación previa avisa si la trayectoria sale del rango (se recortaría). Se muestra la resolución. \\
+Calibración del ADC ($B$, $M$) & En línea & Con asistente: el firmware ya calcula un valor sugerido. \\
+Reloj, ACQPS, pines & Bloqueado & Un error silencioso aquí invalida los resultados. \\
+Duración de la prueba y nombre del registro & Solo PC & No viajan al firmware. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Periodo de muestreo: tres valores preestablecidos}
+\label{sec:ts}
+
+\textbf{Decisión adoptada:} el alumno no escribe $T_s$; elige entre tres valores preestablecidos por modelo. Se justifica así:
+\begin{enumerate}
+    \item $T_s$ no es un dato que el alumno calcule en clase: es una restricción de implementación ligada al presupuesto de ciclos de la interrupción (Sección~\ref{sec:factibilidad}). Un valor libre permite combinaciones inválidas (pérdida de tiempo real, inestabilidad numérica) que un estudiante principiante no sabría diagnosticar.
+    \item Cada valor preestablecido se valida de antemano: ciclos máximos medidos, estabilidad numérica, ancho de banda de telemetría y coeficientes del filtro. Cualquier elección es entonces segura.
+    \item Reduce el espacio de pruebas del proyecto: tres configuraciones por modelo en lugar de un continuo.
+    \item Conserva el valor didáctico: con tres valores se puede mostrar el efecto del muestreo sobre la respuesta sin exponer al alumno a fallas por mal ajuste.
+\end{enumerate}
+Se proponen nombres sencillos (por ejemplo \emph{rápido}, \emph{normal} y \emph{lento}). Para el péndulo, el valor actual de 10~$\mu$s sería el más rápido, porque en un solo núcleo no se puede bajar; los otros dos se fijarán tras medir (pruebas F8 y F9). \pendiente{valores de los tres preestablecidos de cada modelo}
+
+En un \emph{modelo nuevo}, la herramienta calcula los tres valores a partir de $T_{s,\min}$ (presupuesto estimado más un margen) y $T_{s,\max}$ (exactitud) y los presenta; el usuario solo elige. Al aplicar un preestablecido se recalculan el periodo del temporizador, las decimaciones (la derivada se calcula cada 10~ms de tiempo físico, de modo que el número de pasos cambia con $T_s$), la telemetría y el coeficiente del filtro.
+
+\subsection{Controlador}
+\label{sec:ctrl}
+
+Las ``$K$'' calculadas en clase pueden ser las ganancias de un PID o el vector de realimentación de estados (asignación de polos o regulador cuadrático lineal); se confirmó que se requieren \emph{ambas}. El catálogo incluye los dos como \emph{controladores}:
+
+\begin{table}[!htbp]
+\centering
+\caption{Controladores del catálogo y sus parámetros.}
+\label{tab:ctrl}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.2cm}Y>{\raggedright\arraybackslash}p{1.9cm}}
+\toprule
+\textbf{Controlador} & \textbf{Parámetros} & \textbf{Ámbito} \\
+\midrule
+P, PI, PID (forma paralela) & $K_p$, $K_i$, $K_d$; frecuencia de corte del filtro de la derivada; límite del integrador (anti-\textit{windup}); límites de saturación de $u$. & En línea \\
+Realimentación de estados & Vector $K$ de $n$ componentes; acción integral opcional con su ganancia; referencia por variable. & En línea \\
+Estructura (qué términos están activos) & Selección del catálogo. & Generación \\
+Origen de la derivada o de los estados no medidos & Derivada filtrada de la medición (como hoy) o canal propio por estado. & Generación \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Forma del PID.} Los valores del alumno pueden estar escritos en forma paralela ($K_p,K_i,K_d$) o ideal ($K_p, T_i, T_d$). La interfaz debe pedir la forma y convertir, y debe documentar que la implementación deriva sobre la medición, con filtro y paso de derivada propio, y que el integrador es de Euler: el comportamiento puede diferir del continuo si $T_s$ es grande.
+
+\subsection{Parámetros físicos del modelo}
+\label{sec:paramfis}
+
+Además del controlador, el alumno debe poder modificar las \emph{características propias de la planta} (en el péndulo: $L$, $m$, $b$) para estudiar su efecto o ajustar el modelo a un caso de clase. La regla es la misma en los modelos fijos y en los nuevos: cada parámetro del descriptor declara si es \emph{editable}, su rango y su ámbito.
+
+\begin{table}[!htbp]
+\centering
+\caption{Parámetros del péndulo invertido (valores actuales del firmware; la columna ``Editable'' es propuesta).}
+\label{tab:paramfis}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{2.8cm}Y}
+\toprule
+\textbf{Parámetro} & \textbf{Valor actual} & \textbf{Editable} & \textbf{Comentario} \\
+\midrule
+$L$ (longitud) & 0.3~m & Sí & Cambia $g/L$ y $J$. \\
+$m$ (masa) & 0.1~kg & Sí & Cambia $J=mL^2$. \\
+$b$ (fricción viscosa) & 0.005 & Sí & Par por velocidad angular. \\
+$g$ & 9.81~m/s$^2$ & No (modo avanzado) & Constante física; habilitable para simular otro entorno. \\
+$\theta_0$ (condición inicial) & 0.1~rad & Sí (sesión) & Se aplica al reiniciar. \\
+$J$, $g/L$, $1/J$ & derivados & No (solo lectura) & Se recalculan fuera de la interrupción y se muestran. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{itemize}
+    \item \textbf{Ámbito.} Por omisión, de sesión (se aplica al reiniciar), de modo que cada registro CSV corresponda a un único conjunto de parámetros. Un parámetro puede declararse \emph{en línea} para demostraciones de robustez (cambiar la masa con la prueba corriendo); el registro marca el instante del cambio.
+    \item \textbf{Retroalimentación inmediata.} Al editar, la interfaz recalcula los polos de lazo abierto del modelo linealizado (con los valores nominales del péndulo, $+5.447$ y $-6.003$~s$^{-1}$) y avisa si el preestablecido de $T_s$ deja de ser válido; la validación se repite al aplicar.
+    \item \textbf{Rangos.} Valores positivos y físicamente razonables; los rangos declarados se verifican en el peor caso frente a los tres $T_s$. \pendiente{fijar el rango de cada parámetro}
+    \item \textbf{Efecto en el código.} Un parámetro no editable se genera como constante en C (menos ciclos); uno editable, como variable (pocos ciclos, prueba F8). El campo \emph{editable} del descriptor decide.
+    \item \textbf{Valores nominales y perfiles.} Siempre se puede restaurar el valor original; los parámetros físicos forman parte del perfil guardado de una práctica.
+    \item \textbf{Motor y robot.} Los mismos principios; sus parámetros están por definir. Previsiblemente, para el motor: resistencia, inductancia, constantes electromecánicas, inercia, fricción y carga; para el robot: radio de rueda, separación entre ruedas y parámetros de sus motores.
+    \item \textbf{Modelos nuevos.} En el primer paso del asistente, el autor marca cada parámetro como editable o no y fija su rango (obligatorio si es editable). Los no editables se vuelven constantes. Recomendación propuesta: parámetros físicos editables y constantes estructurales no.
+\end{itemize}
+
+\subsection{Perturbación y referencia}
+
+La perturbación depende del modelo: cada descriptor declara qué entradas de perturbación admite, en qué unidades y con qué fuentes.
+
+\begin{table}[!htbp]
+\centering
+\caption{Perturbaciones y referencias por modelo (propuesta).}
+\label{tab:pert}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.4cm}YY}
+\toprule
+\textbf{Modelo} & \textbf{Perturbación} & \textbf{Referencia} \\
+\midrule
+Péndulo invertido & Par externo (ya implementado con potenciómetro; añadir escalón). & Ángulo de equilibrio (cero) y, opcionalmente, un desplazamiento. \\
+Motor de CD & Par de carga. & Velocidad (o posición, según se decida): constante, escalón, onda cuadrada. \\
+Robot diferencial & Por definir: par en una rueda, ruido en velocidades o deslizamiento. & Velocidades lineal y angular, o punto de destino; puede venir de la PC. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+Fuentes de perturbación y referencia (todas compiladas, elegibles en línea): ninguna, constante, escalón (instante y amplitud), senoidal, potenciómetro (canal ADC fijo) y valor enviado desde la PC. Compilar todas y seleccionar en línea evita regenerar para cambiar de fuente.
+
+\section{Modelos precargados}
+
+Los tres modelos precargados son \emph{descriptores} que se entregan con la herramienta: archivos en el mismo formato que usaría un modelo nuevo. Esto es una decisión estructural: no existen dos caminos (uno para los modelos incluidos y otro para los del usuario). El generador procesa siempre un descriptor, y los tres modelos incluidos ponen a prueba ese camino desde el principio.
+
+\begin{itemize}
+    \item El usuario ve los parámetros del modelo con valores por omisión, unidades y rangos; escribe los valores calculados en clase; ejecuta.
+    \item Puede guardar el conjunto como un \emph{perfil} (por ejemplo \texttt{practica\_3.yaml}), exportarlo e importarlo. El perfil se guarda junto al registro CSV de cada prueba, de modo que cada resultado se pueda reproducir.
+    \item ``Restaurar valores originales'' siempre disponible.
+    \item ``Duplicar como modelo nuevo'' copia un descriptor precargado para que el usuario lo modifique. Es la ruta más corta para quien quiere variantes (por ejemplo, un péndulo con otra fricción).
+\end{itemize}
+
+\paragraph{Estado de definición.} El péndulo ya está implementado y caracterizado con el firmware escrito a mano; falta reproducirlo desde su descriptor (prueba F7). El motor de CD y el robot diferencial no están especificados todavía (decisión adoptada), pero la estructura de la interfaz debe preverlos; la Sección~\ref{sec:pestanas} propone cómo.
+
+\section{Organización de la interfaz: una pestaña por modelo}
+\label{sec:pestanas}
+
+Se propone una pestaña por modelo y una pestaña para agregar modelos. Hoy solo existen pruebas del péndulo; el diseño debe prever los tres modelos fijos aunque solo el primero esté implementado.
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,font=\footnotesize]
+\draw[rounded corners=3pt,thick] (0,0) rectangle (14,8);
+\foreach \x/\w/\t/\f in {0.3/2.3/Péndulo/white,2.7/3.7/{Robot (en definición)}/gray!25,6.5/3.9/{Motor CD (en definición)}/gray!25,10.5/3.2/{+ Nuevo modelo}/blue!8}{
+  \filldraw[fill=\f,rounded corners=2pt] (\x,7.0) rectangle ++(\w,0.7);
+  \node at (\x+0.5*\w,7.35) {\t};
+}
+\draw (0,7.0) -- (14,7.0);
+\filldraw[fill=gray!8] (0.3,1.2) rectangle (4.6,6.7);
+\node[anchor=north west,align=left] at (0.45,6.6) {\textbf{Parámetros}\\[2pt]Planta ($L$, $m$, $b$)\\Controlador (PID / $K$)\\Perturbación y referencia\\Muestreo ($T_s$: 3 valores)\\Enlace (baudios)};
+\filldraw[fill=white] (4.9,1.2) rectangle (13.7,6.7);
+\node[anchor=north west] at (5.05,6.6) {\textbf{Ejecutar y monitor}};
+\draw[thick] (5.4,2.0) .. controls (6.5,5.8) and (7.5,1.5) .. (8.6,4.2) .. controls (9.5,6.0) and (11,3) .. (13.2,3.6);
+\node[draw,rounded corners=2pt,fill=green!10] at (6.4,1.55) {Ejecutar};
+\node[draw,rounded corners=2pt,fill=red!10] at (8.0,1.55) {Detener};
+\draw (0.3,0.2) rectangle (13.7,0.9);
+\node at (7.0,0.55) {Estado: puerto COM $\cdot$ reloj $\cdot$ uso de la interrupción $\cdot$ herramientas $\cdot$ caja};
+\end{tikzpicture}
+\caption{Esquema de la ventana principal (boceto). Cada pestaña de modelo repite la misma estructura; las pestañas en gris corresponden a modelos sin descriptor completo.}
+\label{fig:pestanas}
+\end{figure}
+
+\subsection{Estructura}
+
+\begin{itemize}
+    \item \textbf{Pestañas de modelo.} Péndulo, robot diferencial, motor de CD y una pestaña ``+ Nuevo modelo'' con el asistente de la Sección~\ref{sec:nuevos}. Los modelos creados por el usuario aparecen como pestañas adicionales (con opción de ocultar, duplicar o eliminar).
+    \item \textbf{Páginas de cada modelo.} Parámetros (planta, controlador, perturbación y referencia, muestreo y enlace), ejecutar y monitor, y registros.
+    \item \textbf{Elementos globales.} Barra de estado (puerto, reloj verificado, uso de la interrupción, herramientas detectadas), asistente de herramientas y recursos de hardware (Sección~\ref{sec:hw}).
+    \item \textbf{Pestañas generadas, no programadas.} La interfaz construye cada pestaña a partir del descriptor (parámetros, rangos, ámbito, fuentes de perturbación, telemetría). Añadir el robot o el motor no exige cambiar la interfaz: basta aportar el descriptor y el módulo de firmware. El péndulo es la implementación de referencia que valida el diseño.
+\end{itemize}
+
+\subsection{Estados de un modelo}
+
+\begin{table}[!htbp]
+\centering
+\caption{Estados de un modelo en la interfaz.}
+\label{tab:estados}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.4cm}Y>{\raggedright\arraybackslash}p{4.0cm}}
+\toprule
+\textbf{Estado} & \textbf{Significado} & \textbf{Hoy} \\
+\midrule
+Borrador & Sin descriptor completo; la pestaña aparece en gris con la lista de campos que faltan; no se puede ejecutar. & Robot, motor de CD \\
+Definido & Descriptor completo y validado en la PC; sin probar en la tarjeta. & --- \\
+Validado & Superó las pruebas en la tarjeta (ciclos, estabilidad, comparación con la predicción). & Péndulo (firmware a mano; falta F7) \\
+Disponible & Publicado en la herramienta. & --- \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Ficha de definición de un modelo}
+
+Para completar el robot y el motor, y como lista de verificación de cualquier modelo nuevo, se propone esta ficha; la columna del péndulo sirve de referencia.
+
+\begin{table}[!htbp]
+\centering
+\caption{Ficha de definición de un modelo.}
+\label{tab:ficha}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.3cm}Y>{\raggedright\arraybackslash}p{4.4cm}}
+\toprule
+\textbf{Campo} & \textbf{Qué hay que decidir} & \textbf{Péndulo (referencia)} \\
+\midrule
+Estados & Variables, unidades y rango de cada una. & $\theta$, $\dot\theta$ \\
+Entrada de control & Variable y límites de saturación. & $u$, $\pm10$ \\
+Variables por convertidor & Cuáles salen por DAC y cuáles entran por ADC. & $\theta$ (un DAC, un ADC); $\dot\theta$ se estima derivando \\
+Parámetros & Valor, unidad, editable, rango, ámbito. & $L$, $m$, $b$, $g$, $\theta_0$ \\
+Perturbación & Entrada, unidades, fuentes admitidas. & Par externo; potenciómetro y escalón \\
+Referencia & Tipo y fuentes. & Cero (equilibrio) \\
+Controladores aplicables & PID, realimentación de estados o ambos. & PID (hoy) \\
+Tres valores de $T_s$ & Valores validados. & 10~$\mu$s el más rápido; otros por definir \\
+Telemetría & Variables y escala. & Posición, velocidad, acción de control \\
+Visualización & ¿Escena de CoppeliaSim? ¿Cuál? & Sí \\
+Periféricos & Recursos de la caja que usa. & Potenciómetro (ADCINA2) \\
+Seguridad & Recortes y saturaciones. & $\theta$ recortada a $\pm\pi/2$; $u$ saturada \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Modelos nuevos creados por el usuario}
+\label{sec:nuevos}
+
+\subsection{Alcance razonable: tres niveles}
+
+\begin{enumerate}
+    \item \textbf{Modelo lineal invariante.} El usuario escribe las matrices $A$, $B$, $E$ y $C$ de $\dot{x}=Ax+Bu+Ed$, $y=Cx$. El generador produce multiplicaciones matriciales desenrolladas, de tamaño y costo predecibles. Es el nivel más seguro y cubre muchos ejercicios de clase.
+    \item \textbf{Modelo no lineal por ecuaciones.} El usuario escribe $\dot{x}_i=f_i(x,u,d,p)$ en un lenguaje de expresiones restringido (suma, resta, producto, división, potencias enteras pequeñas, \texttt{sin}, \texttt{cos}, \texttt{sqrt}, valor absoluto, signo, saturación, mínimo y máximo). Con él se pueden describir el péndulo, el robot y el motor con fricción de Coulomb.
+    \item \textbf{Código a mano.} Quien necesite algo fuera de lo anterior abre el código generado y lo modifica. No se pretende cubrirlo desde la interfaz.
+\end{enumerate}
+
+\subsection{Cómo se evita ejecutar código arbitrario}
+
+Las expresiones nunca se ejecutan en el equipo del usuario. Se \emph{analizan} con un lector sintáctico, se comprueba que solo contengan nombres declarados y funciones de una lista blanca, y se \emph{traducen} a C. Una biblioteca de álgebra simbólica permite además tres cosas útiles: generar el código C simplificado (reduciendo operaciones repetidas, lo que ahorra ciclos), calcular la matriz jacobiana y sus valores propios en el punto de equilibrio (para validar la estabilidad numérica y calcular $T_{s,\max}$), y estimar el número de operaciones por paso. El péndulo, por ejemplo, tiene polos de lazo abierto de $+5.447$ y $-6.003$~s$^{-1}$, valores que la interfaz habría calculado sola a partir de las ecuaciones.
+
+\subsection{Integrador}
+
+Se ofrece una lista corta, con el costo de cada uno: Euler explícito, Euler--Cromer (para pares posición--velocidad, como en el péndulo actual), Heun (segundo orden) y Runge--Kutta de cuarto orden. Heun y RK4 evalúan la función dos y cuatro veces por paso, y el presupuesto de ciclos se reparte en consecuencia. Para sistemas rígidos (polos muy rápidos) se rechaza el modelo en vez de dar resultados falsos.
+
+\subsection{Asistente de cinco pasos}
+
+\begin{enumerate}
+    \item \textbf{Variables.} Estados, entradas, perturbaciones, parámetros; unidades y rangos.
+    \item \textbf{Dinámica.} Matrices o ecuaciones; integrador.
+    \item \textbf{Conversión.} Qué variables salen por DAC y cuáles entran por ADC; rango de cada una.
+    \item \textbf{Controlador.} Tipo del catálogo y estructura.
+    \item \textbf{Informe de validación.} Presupuesto de ciclos estimado, estabilidad numérica, resolución, ancho de banda, simulación previa en la PC.
+\end{enumerate}
+Después, el camino es idéntico al de los modelos precargados (Figura~\ref{fig:estructura}).
+
+\section{Arquitectura}
+\label{sec:arq}
+
+\begin{figure}[!htbp]
+\centering
+\begin{tikzpicture}[node distance=6mm and 8mm]
+\node[caja] (desc) {Descriptor del modelo\\(YAML)};
+\node[caja,right=of desc] (val) {Validación\\y simulación previa};
+\node[caja,right=of val] (gen) {Generador\\(plantillas)};
+\node[fija,below=12mm of val] (nucleo) {Núcleo fijo\\ISR, convertidores,\\UART, parser};
+\node[caja,below=12mm of gen] (cod) {Proyecto C\\generado};
+\node[caja,below=12mm of desc] (cat) {Catálogo:\\péndulo, robot, motor\\y modelos del usuario};
+\draw[flecha] (desc) -- (val);
+\draw[flecha] (val) -- (gen);
+\draw[flecha] (gen) -- (cod);
+\draw[flecha] (nucleo) -- (cod);
+\draw[flecha] (cat) -- (desc);
+\end{tikzpicture}
+\caption{Todos los modelos, precargados o nuevos, siguen el mismo camino. El núcleo (en azul) no cambia entre modelos.}
+\label{fig:estructura}
+\end{figure}
+
+\subsection{Núcleo fijo y módulos generados}
+
+\begin{itemize}
+    \item \textbf{Núcleo fijo (no generado):} secuencia de la interrupción (leer ADC, controlador, planta, escribir DAC), inicialización de reloj, ADC, DAC y UART, protecciones del reloj, instrumentación de ciclos, y el \emph{analizador de comandos}.
+    \item \textbf{Generados por modelo:} la función de paso de la planta, el controlador seleccionado, el perfil de telemetría, el archivo de configuración (\texttt{config.h}) y la \emph{tabla de parámetros}.
+\end{itemize}
+
+\subsection{Tabla de parámetros: una sola fuente de verdad}
+
+El generador escribe una tabla con un identificador, nombre, valor mínimo y máximo, escala y dirección de cada parámetro en línea o de sesión. El analizador de comandos del núcleo la recorre para atender \texttt{W} y \texttt{R}, de modo que \emph{ningún modelo requiere código de comunicación propio}. La interfaz, por su parte, construye sus controles (cajas numéricas, deslizadores) a partir del mismo descriptor, con los mismos rangos. Así rango y unidad no pueden desincronizarse entre PC y firmware.
+
+\paragraph{Formato del valor.} Los parámetros pueden ser muy pequeños ($T_s=10~\mu$s) o grandes, por lo que un entero en milésimas no basta. Se propone enviar un entero y un exponente decimal: valor $=$ entero $\times 10^{\text{exp}}$, por ejemplo \texttt{W KP 5000 -3} para $K_p=5$. Mantiene la ventaja del enlace actual (solo enteros, sin conversión de números flotantes a texto en C28x).
+
+\subsection{Descriptor: ejemplo ilustrativo}
+
+El siguiente fragmento es solo ilustrativo (valores de ejemplo, no medidos) y muestra cómo se declararían parámetros editables (con su ámbito y rango), ecuaciones y los tres periodos preestablecidos para un motor de CD:
+
+\begin{lstlisting}
+modelo: motor_cd
+estados:
+  i: {unidad: A,     rango: [-5, 5]}
+  w: {unidad: rad/s, rango: [0, 300], dac: B, adc: A0}
+entradas:  {u:  {unidad: V, rango: [-12, 12]}}
+perturbaciones:
+  tl: {unidad: N.m, fuentes: [ninguna, escalon, pot, pc]}
+parametros:
+  R:  {valor: 1.0,    unidad: ohm,   editable: si, ambito: sesion,   min: 0.01, max: 100}
+  Lm: {valor: 0.0005, unidad: H,     editable: no}
+  Ke: {valor: 0.05,   unidad: V.s,   editable: si, ambito: sesion,   min: 1e-3, max: 1}
+  Kt: {valor: 0.05,   unidad: N.m/A, editable: si, ambito: sesion,   min: 1e-3, max: 1}
+  J:  {valor: 1e-4,   unidad: kg.m2, editable: si, ambito: sesion,   min: 1e-6, max: 1}
+  b:  {valor: 1e-4,   unidad: N.m.s, editable: si, ambito: en_linea, min: 0,    max: 1}
+ts_preestablecidos: [por_definir, por_definir, por_definir]
+ecuaciones:
+  i: "(u - R*i - Ke*w)/Lm"
+  w: "(Kt*i - b*w - tl)/J"
+integrador: euler
+controlador: {tipo: pi, mide: w}
+telemetria: [w, u]
+\end{lstlisting}
+
+\subsection{Validaciones}
+
+\begin{table}[!htbp]
+\centering
+\caption{Reglas de validación (E: bloquea; A: advierte).}
+\label{tab:reglas}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{0.9cm}Y}
+\toprule
+\textbf{Tipo} & \textbf{Regla} \\
+\midrule
+E & Las expresiones solo usan nombres declarados y funciones de la lista blanca. \\
+E & Dimensiones consistentes (matrices, número de ecuaciones y de estados). \\
+E & Número de variables convertidas $\le$ canales DAC disponibles. \\
+E & $T_s\ge T_{s,\min}$ (presupuesto de ciclos estimado) y múltiplo del ciclo del temporizador. \\
+E & Baudios con error de divisor dentro de la tolerancia. \\
+E & Ancho de banda de telemetría con margen respecto al enlace. \\
+E & Modelo rígido: $T_s\,|\lambda|_{\max}$ demasiado alto para el integrador elegido. \\
+A & $T_s\,|\lambda|_{\max}>0.1$: exactitud reducida. \\
+A & Trayectoria prevista fuera del rango de conversión: se recortaría. \\
+A & Resolución comparable a la precisión esperada. \\
+A & Las ganancias dadas no estabilizan el modelo linealizado. Es una advertencia y no un bloqueo, porque ver fallar un lazo mal sintonizado es parte del aprendizaje; la saturación de $u$ protege la planta emulada. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Simulación previa y comparación con la medición}
+
+Como el descriptor contiene las ecuaciones, la interfaz puede simular el lazo \emph{en la PC} en segundos y mostrar la respuesta esperada antes de cargar nada. Al ejecutar la prueba superpone la medición sobre la predicción. Esto tiene valor didáctico (el alumno contrasta lo calculado con lo medido) y de verificación (detecta fallas del modelo o del montaje). Hoy esa comparación se hace a mano con MATLAB o Python. \pendiente{decidir si la simulación usa la misma discretización del firmware (recomendado, para comparar lo mismo) y qué bibliotecas se empaquetan}
+
+\section{Consideraciones de hardware: caja y periféricos}
+\label{sec:hw}
+
+Se acordó que la caja se diseñará cuando la estructura de la interfaz esté bien definida y exista al menos otro modelo fijo. Esta sección solo recoge criterios para tenerlos en cuenta; no fija decisiones de diseño físico.
+
+\subsection{Principio: conexión fija, uso configurable}
+
+La caja alojaría la tarjeta, con salidas y entradas conectadas permanentemente a pines fijos (no configurables) y con periféricos también conectados de forma permanente. El usuario decide, desde la interfaz, si activa un periférico según el modelo. Ventajas:
+\begin{enumerate}
+    \item Elimina errores de cableado, causa frecuente de fallas en laboratorio; el puente entre la salida del DAC y la entrada del ADC ya es crítico en el montaje actual.
+    \item El firmware y la interfaz conocen el mapa de pines, lo que permite validar y evitar conflictos.
+    \item El mismo montaje sirve para los tres modelos fijos y para los nuevos.
+    \item La guía técnica se simplifica: menos pasos de montaje.
+\end{enumerate}
+La desventaja es la menor flexibilidad; se mitigaría con un conector de expansión y con el perfil de hardware descrito abajo. \pendiente{decidir si se incluye conector de expansión}
+
+\subsection{Perfil de hardware}
+
+Un archivo de perfil de la caja (por ejemplo \texttt{caja\_v1.yaml}) enumeraría los recursos: identificador, pin, tipo, rango eléctrico y usos permitidos. La interfaz lo lee para ofrecer a cada modelo solo los recursos que existen, evitar conflictos y activar únicamente los que el usuario elija; el generador configura solo los recursos activados. Fragmento ilustrativo (solo el potenciómetro tiene hoy un pin conocido; los demás están por asignar):
+
+\begin{lstlisting}
+recursos:
+  pot1:     {tipo: adc,      pin: ADCINA2,    rango_v: [0, 3.3],
+             usos: [perturbacion, referencia]}
+  sw1:      {tipo: gpio_in,  pin: por_asignar,
+             usos: [habilitar_perturbacion]}
+  btn_paro: {tipo: gpio_in,  pin: por_asignar, usos: [paro]}
+  led_run:  {tipo: gpio_out, pin: por_asignar, usos: [estado]}
+\end{lstlisting}
+
+El descriptor de cada modelo declara qué recursos puede usar; el generador rechaza un modelo que pida un recurso inexistente.
+
+\subsection{Recursos candidatos}
+
+\begin{table}[!htbp]
+\centering
+\caption{Recursos candidatos de la caja (por evaluar).}
+\label{tab:recursos}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{3.3cm}Y}
+\toprule
+\textbf{Recurso} & \textbf{Uso posible} & \textbf{Observaciones} \\
+\midrule
+Potenciómetro(s) & Perturbación, referencia, ganancia. & Entrada ADC. El actual está en ADCINA2 (pin 29) y hoy se lee dentro de la interrupción solo en una fracción de los pasos; cada canal ADC adicional leído ahí cuenta en el presupuesto de ciclos. \\
+Interruptores & Habilitar perturbación, elegir fuente o modo. & GPIO leído en el bucle principal con antirrebote por software. \\
+Pulsadores & Arranque, reinicio del estado, paro. & GPIO leído en el bucle principal. \\
+LED de estado & Corriendo, alarma de reloj, \textit{overrun}, enlace. & GPIO de salida; útil aun sin la PC conectada. \\
+Puntos de prueba & Salidas DAC, entradas ADC y una señal digital que conmute dentro de la interrupción. & Permiten medir con osciloscopio la duración de la interrupción y los baudios, que la tesis ya lista como trabajo futuro. \\
+Puentes DAC$\rightarrow$ADC & Cierran el lazo de cada variable convertida. & Fijos dentro de la caja. \\
+Acceso a USB y reinicio & Enlace con la PC y carga. & La caja debe dejarlos accesibles. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Criterios eléctricos y mecánicos}
+
+\begin{itemize}
+    \item \textbf{Niveles.} Las entradas del ADC trabajan en el rango de 0 a 3.3~V \pendiente{verificar en la hoja de datos}; conviene protegerlas (resistencia en serie y limitación) para que un error de cableado o un periférico no dañen la tarjeta.
+    \item \textbf{Alimentación de potenciómetros} desde la referencia de 3.3~V de la tarjeta, nunca a un nivel mayor.
+    \item \textbf{Asignación de pines} sin conflicto con funciones ya usadas (SCI-A en los pines GPIO42 y GPIO43, ADC A0 y A2, DAC-B, enlace de depuración). \pendiente{construir la tabla de pines libres de la LaunchPad}
+    \item \textbf{Capacidad futura.} El chip tiene tres salidas DAC; la caja debería sacarlas todas si la tarjeta lo permite, previendo modelos que cierren más variables.
+    \item \textbf{Mecánica.} Etiquetas con el mismo nombre que usa la interfaz, alivio de tensión de cables, ventilación y acceso al USB y al botón de reinicio.
+\end{itemize}
+
+\subsection{Impacto en el software}
+
+La interfaz tendría un panel de recursos (estado y activación). En el firmware, los periféricos lentos se leerían en el bucle principal y solo los activados. Hoy la perturbación se elige al compilar (\texttt{MODO\_PERT}: ninguna, potenciómetro o escalón, en archivos distintos); habría que pasar a seleccionarla en línea, lo que se mide en la prueba F8.
+
+\subsection{Cuándo decidir}
+
+Después de la etapa M3 (estructura de la interfaz y un segundo modelo fijo). Para ello se añaden las etapas H0 y H1 (Tabla~\ref{tab:etapas}).
+
+\section{Riesgos y pruebas de factibilidad adicionales}
+\label{sec:riesgos}
+
+\begin{table}[!htbp]
+\centering
+\caption{Pruebas de factibilidad adicionales (continúan la numeración del reporte anterior).}
+\label{tab:pruebas}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{1.0cm}Y>{\raggedright\arraybackslash}p{4.4cm}}
+\toprule
+\textbf{ID} & \textbf{Qué se prueba} & \textbf{Criterio} \\
+\midrule
+F7 & El generador reproduce el péndulo actual desde su descriptor. & Mismo comportamiento y mismo error que la versión escrita a mano. \\
+F8 & Costo de hacer variables los parámetros. & Aumento de \texttt{isr\_max\_cycles} medido y aceptable. \\
+F9 & Cambiar $T_s$ al reiniciar. & Decimaciones y telemetría coherentes; sin \textit{overruns}. \\
+F10 & Motor de CD (2 estados, lineal) generado frente a una versión manual. & Misma respuesta. \\
+F11 & Baudios de 230\,400 con el adaptador de la tarjeta. & Sin errores de recepción en 10 minutos. \\
+F12 & Seno y coseno con y sin TMU para el robot. & Ciclos medidos y dentro del presupuesto. \\
+F13 & Estimación estática de ciclos frente a la medida. & Desviación acotada; si es grande, se calibra con datos medidos. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Riesgos principales: que la estimación estática de ciclos sea poco fiable (mitigación: F13 y medición real obligatoria antes de ejecutar); que la dependencia de bibliotecas de cálculo simbólico y numérico aumente mucho el tamaño del ejecutable empaquetado (mitigación: usar el análisis simbólico solo al generar y evaluar el empaquetado); que un modelo del usuario cumpla las validaciones pero no el tiempo real (mitigación: el firmware sigue contando \textit{overruns} y la interfaz los muestra); que el alcance de ``modelos nuevos'' crezca sin control (mitigación: los tres niveles de la Sección~\ref{sec:nuevos}); y que la caja fije recursos que un modelo futuro necesite (mitigación: hacer el inventario H0 después de definir al menos un segundo modelo).
+
+\section{Etapas propuestas}
+
+\begin{table}[!htbp]
+\centering
+\caption{Etapas para la configuración de modelos (se suman a G1--G5 del reporte anterior).}
+\label{tab:etapas}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{1.1cm}Y>{\raggedright\arraybackslash}p{4.2cm}}
+\toprule
+\textbf{Etapa} & \textbf{Contenido} & \textbf{Criterio} \\
+\midrule
+M1 & Formato del descriptor y generador para el péndulo; parámetros como variables. & F7 y F8. \\
+M2 & Tabla de parámetros y analizador de comandos en el núcleo; $T_s$ de sesión. & F9. \\
+M3 & Descriptores del motor de CD y del robot diferencial. & F10 y F12. \\
+M4 & Formularios de parámetros, perfiles y simulación previa. & Un alumno cambia ganancias y compara con la predicción. \\
+M5 & Asistente de modelo nuevo lineal. & Un modelo lineal nuevo corre de principio a fin. \\
+M6 & Asistente de modelo nuevo por ecuaciones. & Un modelo no lineal nuevo corre de principio a fin. \\
+H0 & Inventario de recursos y asignación de pines de la caja (tras M3). & Tabla de pines sin conflictos; perfil de hardware leído por la interfaz. \\
+H1 & Diseño y construcción de la caja. & Primera prueba completa usando solo las conexiones de la caja. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Decisiones tomadas y puntos pendientes}
+\label{sec:preguntas}
+
+\subsection{Decisiones adoptadas (11 de noviembre de 2026)}
+\begin{enumerate}
+    \item Las ``$K$'' son tanto ganancias de PID como vector de realimentación de estados.
+    \item Motor de CD y robot diferencial: sin especificar; se diseña la estructura previéndolos (pestañas en definición y ficha).
+    \item $T_s$: tres valores preestablecidos por modelo.
+    \item Interfaz con una pestaña por modelo y una para agregar modelos; solo el péndulo tiene pruebas.
+    \item Parámetros físicos editables en los modelos fijos; en los nuevos, el usuario decide cuáles.
+    \item Hardware: caja con conexiones fijas y periféricos activables desde la interfaz; se decide tras definir la interfaz y un segundo modelo fijo.
+\end{enumerate}
+
+\subsection{Puntos pendientes}
+\begin{enumerate}
+    \item Completar la ficha (Tabla~\ref{tab:ficha}) del motor de CD y del robot diferencial cuando se trabaje en ellos.
+    \item Valores de los tres periodos preestablecidos de cada modelo, tras medir (F8 y F9).
+    \item Rango de cada parámetro físico editable y si $g$ se habilita en modo avanzado.
+    \item Tolerancia de error de baudios (aquí se propone 2\kern.15em\relax\%) y su justificación.
+    \item Orden de entrega: modelos lineales primero, no lineales después; controladores propios fuera de la primera versión.
+    \item Lista final de recursos de la caja, conector de expansión y tabla de pines libres.
+    \item Aprobación del director de todo lo anterior.
+\end{enumerate}
+
+\begin{thebibliography}{9}
+\bibitem{ds} Texas Instruments, \textit{TMS320F2837xD Dual-Core Delfino Microcontrollers: selection and feature summary}. \url{https://www.ti.com/lit/gpn/f28377d-sep}
+\bibitem{ccs} Texas Instruments, \textit{Code Composer Studio 20.5.1 User's Guide}. \url{https://software-dl.ti.com/ccs/esd/documents/users_guide_ccs_20.5.1/ccs_project-command-line.html}
+\bibitem{fw} Firmware del péndulo, \texttt{control\_hil\_v3.c} (repositorio del proyecto): valores y expresiones citados en la Sección 1 y en la Tabla~\ref{tab:baud}.
+\end{thebibliography}
+
+\end{document}

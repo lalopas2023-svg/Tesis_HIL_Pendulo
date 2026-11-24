@@ -1,0 +1,577 @@
+\documentclass[12pt,letterpaper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-tabla]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs,tabularx,array}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{etoolbox}\AtBeginDocument{\shorthandoff{<>}}
+\usepackage{enumitem}
+\setlist{itemsep=2pt,topsep=4pt}
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,frame=single,columns=fullflexible,keepspaces=true,showstringspaces=false}
+\renewcommand{\arraystretch}{1.15}\emergencystretch=3em
+\def\UrlBreaks{\do\/\do\-\do\_\do\.\do\=\do\?}\Urlmuskip=0mu plus 1mu
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\cod}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\pendiente}[1]{\textbf{[PENDIENTE: #1]}}
+\newcommand{\mrad}{\,\mathrm{mrad}}
+
+\begin{document}
+\thispagestyle{empty}
+\begin{center}
+\includegraphics[scale=0.6]{Imagenes/UTM.png}
+\end{center}
+
+\begin{Large}
+	\begin{center}
+		\textbf{UNIVERSIDAD TECNOLÓGICA DE LA MIXTECA}\\
+	\end{center}
+\end{Large}
+
+\begin{Large}
+	\newlength{\longTitulo}
+	\settowidth{\longTitulo}{\textbf{xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}}
+	\begin{center}
+		\rule{\longTitulo}{.15mm}
+		\vskip 0.5cm
+		{\textbf{Pruebas de factibilidad para la automatización del flujo de trabajo de la plataforma HIL}}\\
+        \vskip 0.3cm
+        {\large Reporte de prácticas: procedimientos, hallazgos y justificación\\ Versión 1.0 para revisión del director}\\
+        \vskip 0.05cm
+		\rule{\longTitulo}{.15mm}\\
+	\end{center}
+\end{Large}
+
+\begin{center}
+	{\normalsize Proyecto de tesis: ``Desarrollo de una plataforma modular \textit{Hardware in the Loop} (HIL) para la emulación de sistemas de control''}
+\end{center}
+\vfill
+
+\begin{center}{
+ \textbf{Para obtener el grado de:}\\\vspace{0.2cm}
+        {Maestría en Robótica}\vspace{0.2cm}\\}
+\end{center}
+
+\begin{center}{
+    \textbf{Presenta:}\\\vspace{0.2cm}
+    {Ing. Eduardo Pascual Pérez}\vspace{0.2cm}\\}
+\end{center}
+
+\begin{center}
+    {\textbf{Director:}\\\vspace{0.2cm}
+    Dr. Fermín Hugo Ramírez Leyva\vspace{0.2cm}\\}
+\end{center}
+
+\begin{center}
+    {\textbf{Codirector:}\\\vspace{0.2cm}
+   M.C. Felipe Santiago Espinosa\vspace{0.2cm}\\}
+\end{center}
+
+\begin{center}
+    \vspace{0.4cm}
+	{Huajuapan de León, Oaxaca a 20 de noviembre de 2026}
+\end{center}
+\clearpage
+
+\tableofcontents\clearpage
+
+%==============================================================================
+\section{Introducción y alcance}
+\label{sec:intro}
+
+El reporte de diseño de la interfaz gráfica (GUI) propone automatizar el flujo de trabajo de la plataforma: compilar el firmware, cargarlo en la tarjeta, ejecutar la prueba y visualizarla en CoppeliaSim, sin que el usuario tenga que abrir el entorno de desarrollo. Esa propuesta descansa sobre supuestos acerca de las herramientas de Texas Instruments (TI) y de CoppeliaSim que, antes de comprometer el diseño, había que comprobar en el equipo del laboratorio. Para ello se definió una lista de pruebas de factibilidad, de F1 a F6.
+
+Este reporte documenta lo realizado entre el 17 y el 19 de noviembre de 2026. Para cada prueba se indica qué se quería comprobar, con qué fundamento, qué se hizo, qué resultó y qué decisión de diseño se desprende. Se registran también los problemas que aparecieron en el camino, cómo se resolvieron y por qué la solución es la adecuada desde el punto de vista teórico y práctico. Donde un dato no pudo confirmarse, se dice expresamente.
+
+Este documento pertenece a la documentación independiente de la GUI. No modifica el contenido de la tesis, que sigue limitado a lo implementado y probado (el péndulo invertido) hasta que el director apruebe la propuesta.
+
+\begin{table}[!htbp]
+\centering
+\caption{Estado de las pruebas de factibilidad al 20 de noviembre de 2026.}
+\label{tab:estado}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{0.9cm}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{2.6cm}Y}
+\toprule
+\textbf{ID} & \textbf{Qué se prueba} & \textbf{Estado} & \textbf{Observación principal} \\
+\midrule
+F1 & Compilar sin abrir el IDE & Aprobada & Funciona; el obstáculo era la sintaxis de PowerShell (Sec.~\ref{sec:f1}). \\
+F2 & Cargar con \textit{DSLite} sin IDE & Aprobada, con una limitación & \cod{DSLite memory} no sirve para inspeccionar el programa en marcha (Sec.~\ref{sec:f2}). \\
+F3 & \textit{Flash} frente a RAM & Pendiente & --- \\
+F4 & Cargar CPU2 por línea de comandos & Pendiente & --- \\
+F5 & Comandos por UART con la ISR activa & Preparada, sin ejecutar en la tarjeta & Firmware y \textit{script} listos (Sec.~\ref{sec:f5}). \\
+F6 & CoppeliaSim por línea de comandos y ZeroMQ & Aprobada & El cierre sin ventana requiere terminar el proceso (Sec.~\ref{sec:f6}). \\
+\midrule
+--- & Desviación de posición en régimen permanente & Mitigada; causa raíz sin determinar & Autocalibración del offset del ADC, validada en dos arranques (Sec.~\ref{sec:offset}). \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%==============================================================================
+\section{Equipo y método de trabajo}
+\label{sec:metodo}
+
+\subsection{Equipo y versiones}
+
+\begin{table}[!htbp]
+\centering
+\caption{Entorno de las pruebas.}
+\label{tab:entorno}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.6cm}Y}
+\toprule
+\textbf{Elemento} & \textbf{Detalle} \\
+\midrule
+Computadora & \cod{lap-pascual}, Windows 11, Windows PowerShell 5.1 \\
+Tarjeta y sonda & LAUNCHXL-F28379D, sonda XDS100v2 \\
+Entorno de desarrollo & Code Composer Studio (CCS) 20.5.1.00012, compilador C2000 25.11.0.LTS, C2000Ware 5.2.0.00 \\
+Carga por línea de comandos & \textit{DSLite} 20.5.0.4063 (incluido en la instalación de CCS) \\
+Simulador & CoppeliaSim Edu; cliente Python \texttt{coppeliasim\_\allowbreak zmqremoteapi\_\allowbreak client} 2.0.4 \\
+Enlace serie & COM10, 115\,200 baudios \\
+Proyecto bajo prueba & \cod{Proyecto_Pendulo_CPU1}, configuración \cod{CPU1_RAM_DEBUG}, en una \textbf{copia aislada} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Método}
+
+Todas las pruebas se hicieron sobre una copia aislada del proyecto, de modo que ningún experimento pudiera alterar el firmware que respalda los resultados de la tesis. Cada prueba siguió el mismo orden: objetivo y criterio de éxito, fundamento, procedimiento, resultado y decisión. Los comandos fueron ejecutados por el estudiante en el laboratorio; las salidas y los registros se revisaron después. Cada cambio quedó anotado en la bitácora de pruebas del proyecto, con la forma de restaurar el estado anterior.
+
+Para que el lector sepa cuánto pesa cada afirmación, el texto distingue cuatro tipos de evidencia:
+\begin{itemize}
+    \item \textbf{medido}: resultado de una corrida en el equipo;
+    \item \textbf{documentado}: dicho por la documentación del fabricante, citada en las referencias;
+    \item \textbf{leído}: tomado de un archivo del propio proyecto o de la instalación (código fuente, archivo GEL);
+    \item \textbf{inferido}: explicación coherente con lo medido pero no comprobada con una prueba directa.
+\end{itemize}
+
+%==============================================================================
+\section{F1: compilar sin abrir el entorno gráfico}
+\label{sec:f1}
+
+\subsection{Objetivo, fundamento y criterio}
+
+\textbf{Objetivo.} Comprobar que el proyecto puede compilarse desde una línea de comandos, produciendo el mismo programa que el IDE, para que la GUI pueda invocarlo.
+
+\textbf{Fundamento (documentado).} CCS 20.x conserva una aplicación de línea de comandos, \cod{ccs-server-cli}, ubicada en la carpeta \cod{ccs/eclipse} de la instalación. Su documentación describe las aplicaciones \cod{importProject} y \cod{buildProject} y el patrón de uso \cod{ccs-server-cli -noSplash -workspace <dir> -application <app> [opciones]} \cite{ccs_cli}. La aplicación \cod{buildProject} acepta, entre otras, \cod{-ccs.projects}, \cod{-ccs.configuration}, \cod{-ccs.buildType} (valores \cod{incremental}, \cod{full} y \cod{clean}) y \cod{-ccs.listProblems}, que lista errores y advertencias al terminar \cite{ccs_opts}.
+
+\textbf{Por qué importa compilar con la misma configuración (leído).} El comentario del propio firmware lo explica: el símbolo de preprocesador \cod{_LAUNCHXL_F28379D} no lo usa el archivo del proyecto sino \cod{F2837xD_SysCtrl.c} (la función \cod{InitSysCtrl}), que con ese símbolo configura el PLL a 200~MHz y sin él a 100~MHz. El diseño exige 200~MHz: el paso de la planta es $T_s=10~\mu$s, equivalente a 2000 ciclos de reloj, y a 100~MHz la interrupción no cabría en su presupuesto. Ese error ya costó tiempo de diagnóstico en una etapa anterior (el reloj estaba a la mitad de lo previsto). Por eso el criterio de éxito de F1 no es solo ``compila'', sino ``compila con las mismas banderas y símbolos que el IDE''.
+
+\textbf{Criterio.} Se genera el \cod{.out}; la tabla de símbolos coincide con la del IDE; el símbolo del reloj está presente; los errores de compilación se distinguen de los éxitos sin intervención humana.
+
+\subsection{Resultados (medido)}
+
+\begin{table}[!htbp]
+\centering
+\caption{Resultados de F1 (compilación completa, unos 8~s).}
+\label{tab:f1}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.4cm}Y}
+\toprule
+\textbf{Comprobación} & \textbf{Resultado} \\
+\midrule
+Compilación & 0 errores, 2 advertencias sin importancia (el proyecto no fija codificación; el archivo termina sin salto de línea) \\
+Archivo generado & \cod{.out} de 493\,880 bytes (línea base del IDE: 494\,300) \\
+Tabla de símbolos & \textbf{Idéntica} a la línea base: 280 de 280 símbolos con la misma dirección \\
+Símbolo del reloj & \cod{--define=_LAUNCHXL_F28379D} presente en las 14 líneas de compilación \\
+Compilador y banderas & \texttt{ti-cgt-c2000\_25.11.0.LTS}, mismas banderas que el IDE (\cod{-v28 -ml -mt --cla_support=cla1 --float_support=fpu32 --tmu_support=tmu0 --vcu_support=vcu2}) \\
+C2000Ware & 5.2.0.00 (la versión correcta; no se tomó la 26.00) \\
+Diferencia de tamaño & 420 bytes menos; atribuida a rutas de depuración (el proyecto está en otra carpeta). \textit{Inferido, no verificado} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Hallazgo 1: el problema era la sintaxis de PowerShell, no la herramienta}
+\label{sec:hallazgo_ps}
+
+\textbf{Síntoma (medido).} Los primeros intentos de importar y compilar escribían las opciones directamente en la línea de comandos, por ejemplo \cod{-ccs.location "ruta"}. En todos los casos la herramienta imprimió su pantalla de ayuda sin indicar el motivo. En cambio, los mismos comandos funcionaron siempre que las opciones se pasaron entre comillas o como un arreglo de cadenas.
+
+\textbf{Qué se hizo.} Se repitió la prueba con el lanzador oficial \cod{ccs-server-cli.bat} y con las opciones entre comillas (\cod{"-ccs.location"}): importación y compilación terminaron con código 0 y sin errores. Esa prueba descartó que el fallo fuera del lanzador o de la herramienta. Además, en una revisión del código de TI se vio que la ayuda se imprime cuando la opción \cod{-ccs.location} llega vacía, sin mensaje de error, que es justo lo observado.
+
+\textbf{Explicación y su grado de certeza.} Al ejecutar un programa externo, PowerShell primero analiza los argumentos y después los une en una sola cadena para entregarla al programa \cite{ps_parsing}. Mi explicación es que Windows PowerShell~5.1 parte un argumento sin comillas que empieza con guion y contiene un punto, de modo que \cod{-ccs.location} llega como dos fragmentos (\cod{-ccs} y \cod{.location}) y el programa recibe la opción sin su valor. Debo ser claro: la página de documentación de PowerShell que consulté describe las reglas generales del modo de argumentos, pero \textbf{no menciona este caso} de guion con punto. La observación (quedan bien con comillas, mal sin ellas) es medida; la causa exacta es una \textit{inferencia}. No se probó el análisis con un programa que imprima sus argumentos. Hay antecedentes documentados de comportamientos parecidos: PowerShell divide un argumento como \cod{-foo:bar} cuando se pasa a un comando de PowerShell, lo cual los mantenedores consideran intencional (los dos puntos terminan el nombre del parámetro) \cite{ps_issue}, y la propia documentación de Microsoft para usar Maven desde PowerShell exige poner entre comillas cada argumento \cod{-Dnombre=valor} \cite{maven}.
+
+\textbf{Solución y justificación.} Practicamente: entrecomillar cada opción o pasarlas como arreglo (\cod{@a}), como se hace en el Apéndice~\ref{ap:comandos}. Teóricamente, la solución elimina la ambigüedad en origen, porque un token entre comillas es un literal y no se reinterpreta. Para la GUI la consecuencia es favorable: un programa en Python que lanza procesos con una \textit{lista} de argumentos no pasa por el análisis de PowerShell. La documentación de \cod{subprocess} recomienda pasar \cod{args} como secuencia porque el módulo se encarga del escapado y del entrecomillado necesarios, y con \cod{shell=False} no se invoca ningún intérprete de comandos \cite{pysub}. El problema que costó una tarde en la terminal no existirá en la GUI.
+
+\subsection{Hallazgo 2: cómo detectar un fallo de compilación}
+
+\textbf{Medido.} Se añadió deliberadamente la línea \cod{int error_prueba = ;} al código. El resultado fue el mensaje \texttt{\#29: expected an expression} (línea 405), el resumen ``1 out of 1 projects have errors'' y código de salida \textbf{1}. Con el código restaurado, la compilación volvió a terminar con código 0 y 0 errores. Con la opción \cod{-ccs.listProblems} (documentada \cite{ccs_opts}) el resumen de errores y advertencias sale por la salida estándar con el formato \cod{Error: archivo [line N]: mensaje}.
+
+\textbf{Lo que la documentación no dice.} Las páginas de la guía de CCS que consulté \textbf{no documentan códigos de salida} \cite{ccs_cli,ccs_opts}. El comportamiento (0 si compila, 1 si hay errores) es por tanto una observación empírica de la versión 20.5.1.
+
+\textbf{Decisión.} La GUI detectará el éxito por el código de salida y mostrará los errores analizando la salida con una expresión regular. Como el contrato no está documentado, se añadirá una prueba automática que reproduzca el error de sintaxis y avise si una versión futura de CCS cambia ese comportamiento.
+
+\subsection{Otros hallazgos de F1 (medido)}
+
+\begin{itemize}
+    \item \textbf{El parámetro \cod{-workspace} del lanzador no es el espacio de trabajo real.} Solo es el destino de importación por omisión; los metadatos se guardan en una carpeta bajo \texttt{\%LOCALAPPDATA\%}, cuyo nombre depende de la ruta. Con \cod{ccs-serverc.exe} el espacio de trabajo se indica con \cod{-data}. Consecuencia: la GUI debe fijar un espacio de trabajo propio y estable.
+    \item \textbf{\cod{-ccs.buildType full}} limpia y luego compila (la salida muestra ``Clean-only build'' durante la fase de limpieza). Es la opción adecuada para una compilación reproducible.
+    \item \textbf{La herramienta detecta los cambios.} Al cambiar la constante \cod{ADC_CAL_B} de 6.1 a 6.2, la compilación incremental produjo un \cod{.out} distinto (SHA-256 \cod{FCDC6912...} frente a \cod{B94B8B75...}).
+    \item \textbf{No comprobado:} que el binario restaurado tras la prueba de error vuelva a tener el hash original (no se midió) y la compilación con CCS abierto (paso 7 de la guía, opcional).
+\end{itemize}
+
+%==============================================================================
+\section{F2: cargar el programa con \textit{DSLite} sin el IDE}
+\label{sec:f2}
+
+\subsection{Objetivo, fundamento y criterio}
+
+\textbf{Objetivo.} Cargar el \cod{.out} en la RAM de la CPU1 desde la línea de comandos y comprobar que el programa corre correctamente.
+
+\textbf{Fundamento (documentado).} \textit{DSLite} es la utilidad de línea de comandos de TI para programar dispositivos. Su documentación indica que se invoca con un archivo de configuración del objetivo (\cod{.ccxml}), que es obligatorio salvo para pedir ayuda, y que tiene modos de operación: \textit{flash} (por omisión), \textit{memory} (exportar memoria a un archivo) y \textit{load} (una carga simple). También documenta que el código de salida es 0 cuando la operación tuvo éxito y distinto de 0 cuando falló \cite{uniflash}. Esa última propiedad es la que permite a la GUI saber si una carga funcionó sin interpretar texto.
+
+\textbf{Criterio.} Código de salida 0; el programa responde \cod{OK} a la señal de arranque \cod{S}; el reloj es de 200~MHz; la carga es repetible; los fallos dan mensajes legibles.
+
+\subsection{Sintaxis real (medido)}
+
+La ayuda real difiere de lo que suponía la guía de pruebas: se pide con \cod{DSLite help} (la opción \cod{--help} responde ``Unknown operation''). Las operaciones son \cod{load}, \cod{flash}, \cod{memory}, \cod{identifyProbe} y \cod{help}. La operación \cod{load} acepta \cod{-c} (configuración), \cod{-f} (archivo), \cod{-t} (tiempo máximo), \cod{-g} (registro), \cod{-n} (núcleo, por omisión 0) y \cod{-h}. No tiene opción de ejecución ni de reinicio: carga y sale ``dejando el \textit{target} corriendo''. Las banderas \cod{-r} y \cod{-u} que se habían supuesto quedaron descartadas.
+
+\subsection{Resultados (medido)}
+
+\begin{itemize}
+    \item \textbf{Carga:} \cod{exit=0}, mensaje \cod{Success}, 17.8~s la primera vez (incluye la lectura inicial de la configuración del chip). Con CCS cerrado y sin procesos \cod{ccs}, \cod{theia}, \cod{dslite} ni \cod{gmake} activos.
+    \item \textbf{Repetibilidad:} 10 cargas seguidas, \textbf{10 de 10} con código 0, de 7.5 a 8.4~s cada una.
+    \item \textbf{Funcionamiento:} con el \textit{middleware} de Python (\cod{hil_coppelia.py}): \cod{S} confirmada con \cod{OK}, 2000 líneas válidas, 0 ignoradas, 100 tramas por segundo, 20.12~s de reloj real. Son los mismos valores que las corridas del 9 de noviembre con carga desde el IDE.
+    \item \textbf{Reloj:} la tasa de 100 tramas/s valida los 200~MHz, porque cada trama se emite cada 1000 interrupciones de 10~$\mu$s. A 100~MHz la tasa habría sido de 50 tramas/s.
+    \item \textbf{Tiempo de la interrupción:} con el binario compilado por línea de comandos cargado desde CCS y leído en la vista \textit{Watch}, el máximo fue de 1578 ciclos, con 0 \textit{overruns} y 0 \textit{timeouts} del ADC. Es el mismo máximo que con el binario del IDE (en otra corrida del proyecto original, 1377). El presupuesto es de 2000 ciclos.
+\end{itemize}
+
+\subsection{Hallazgo 3: \cod{DSLite memory} destruye el programa que se quiere inspeccionar}
+\label{sec:hallazgo_memory}
+
+\textbf{Síntoma (medido).} Se intentó leer \cod{isr_max_cycles}, \cod{isr_overruns} y \cod{sysclk_mhz_reg} con \cod{DSLite memory} mientras el programa corría. Todas las lecturas salieron en cero, con distintos rangos, antes y después de una corrida, y también al leer la dirección \cod{0x8000} recién cargada. Tras dos lecturas de memoria, el programa dejó de responder \cod{OK} a la señal \cod{S}; una nueva carga con \cod{load} restableció el funcionamiento. La interferencia no es permanente, pero sí invalida la lectura.
+
+\textbf{Causa (leída y documentada).} CCS ejecuta scripts en el lenguaje GEL (\textit{General Extension Language}) asociados al dispositivo. La documentación de TI indica que la función \cod{OnTargetConnect()} se ejecuta \textbf{cada vez} que se conecta un objetivo, y advierte que un comando que cambie el estado del objetivo, como \cod{GEL_Reset}, detiene el objetivo y anula la posibilidad de conectar sin interferir \cite{gel}. El archivo \cod{f28379d_cpu1.gel} instalado con CCS 20.5.1 contiene exactamente eso: su \cod{OnTargetConnect()} escribe los registros de inicialización de RAM (\cod{0x5F412}, \cod{0x5F432}, \cod{0x5F452}, que el propio archivo comenta como ``RAM INIT'') y llama a \texttt{GEL\_Reset()}. Toda operación de \textit{DSLite} que conecte con la tarjeta (\cod{load} o \cod{memory}) ejecuta esa rutina antes de actuar.
+
+\textbf{Por qué \cod{load} no sufre y \cod{memory} sí.} En una carga, el reinicio ocurre \textit{antes} de cargar el programa, así que es inocuo. En una lectura de memoria, el reinicio ocurre \textit{después} de que el programa ya estaba corriendo, y lo borra junto con las variables que se querían leer. \textit{Inferido:} no se comprobó con una lectura directa que la RAM quede realmente en cero; la explicación es la lectura del GEL más lo observado.
+
+\textbf{Decisión.} \cod{DSLite memory} no se usará para inspeccionar el programa en marcha. El criterio de rendimiento se midió con CCS (vista \textit{Watch}), y la alternativa para la GUI es exponer los contadores por la UART con un comando de diagnóstico (prueba F5, Sección~\ref{sec:f5}). Es además la opción más coherente con el diseño: un solo canal, el puerto serie, para datos y diagnóstico.
+
+\subsection{Pruebas negativas (medido)}
+
+\begin{table}[!htbp]
+\centering
+\caption{Fallos de \textit{DSLite}: código de salida y mensaje.}
+\label{tab:negativas}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.8cm}>{\centering\arraybackslash}p{0.9cm}>{\centering\arraybackslash}p{1.9cm}Y}
+\toprule
+\textbf{Caso} & \textbf{exit} & \textbf{Duración} & \textbf{Mensaje clave} \\
+\midrule
+\cod{.out} inexistente & 1 & --- & \cod{Failed: Encountered a problem loading file} / \cod{Could not open file} \\
+\cod{.ccxml} inexistente & 1 & --- & \cod{Failed: Cannot read System Setup data from XML file} \\
+USB desconectado & 1 & 1.1~s & Error~$-151$ del controlador FTDI (``no XDS100 is plugged in\ldots'') y \texttt{Operation was aborted on 'C28xx\_CPU1'} \\
+CCS con sesión de depuración abierta & 1 & 3.3~s & \textbf{El mismo error $-151$} \\
+Recuperación tras cada caso & 0 & 6~s & \cod{Success} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\textbf{Hallazgos de diseño.}
+\begin{itemize}
+    \item Los fallos de conexión son rápidos (1 a 3~s), mucho menos que el tiempo máximo de 60~s, que solo importa para cargas lentas. La GUI no necesita esperar el tiempo máximo para avisar de un problema.
+    \item \textbf{``Sin tarjeta'' y ``sonda ocupada por CCS'' no se distinguen por el mensaje.} Ambos producen el mismo error $-151$. La GUI debe distinguirlos por otro medio, por ejemplo revisando si hay procesos de CCS activos antes de culpar al cable.
+    \item \cod{identifyProbe} devuelve código 0 incluso sin tarjeta (solo imprime la versión), por lo que no sirve como prueba de presencia. No se probó conectada.
+    \item Los mensajes salen por el canal de error: en Python se leen de \cod{stderr}; la última línea \cod{Failed: ...} resume el fallo.
+    \item Tras desconectar o liberar la sonda, una carga posterior funciona sin pasos adicionales (conviene esperar unos 5~s tras reconectar el USB).
+    \item El mensaje actual del \textit{middleware} ante falta de \cod{OK} (``CCS en Resume\ldots'') pertenece al flujo manual con el IDE; con carga por \textit{DSLite} no aplica y la GUI debe dar el suyo.
+\end{itemize}
+
+%==============================================================================
+\section{F6: CoppeliaSim por línea de comandos y ZeroMQ}
+\label{sec:f6}
+
+\subsection{Objetivo, fundamento y criterio}
+
+\textbf{Objetivo.} Abrir la escena del péndulo desde la línea de comandos, controlar la simulación sin intervención y cerrar el programa sin dejar procesos.
+
+\textbf{Fundamento (documentado).} El manual de CoppeliaSim describe opciones de línea de comandos: \cod{-h} ejecuta el programa en modo \textit{headless emulado} (suprime los elementos gráficos, pero funciona con normalidad), \cod{-H} en modo \textit{headless} verdadero (pero ``sigue requiriendo un servidor de pantalla''), \cod{-s} inicia la simulación automáticamente, \cod{-q} cierra el programa al terminar la primera simulación y \cod{-f} carga una escena \cite{coppelia_cmd}. La API remota por ZeroMQ permite controlar la simulación o el propio simulador desde una aplicación externa, con un cliente en Python \cite{coppelia_zmq}.
+
+\textbf{Hallazgo previo, por lectura de código (leído).} El \textit{middleware} existente (\cod{viz_coppelia.py}) ya usa esa API: obtiene el objeto \cod{sim}, busca \texttt{/pendulum\_joint} y \cod{/graph}, y llama a \cod{startSimulation}, \cod{setJointPosition} y \cod{stopSimulation}. Por tanto el control por ZeroMQ ya estaba en uso en todas las corridas anteriores. Además, el visor es \textbf{pasivo}: fija la posición de la articulación con lo que llega del DSP, porque la planta se emula en la tarjeta y no en el simulador.
+
+\subsection{Resultados (medido)}
+
+\begin{table}[!htbp]
+\centering
+\caption{Resultados de F6.}
+\label{tab:f6}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.6cm}Y}
+\toprule
+\textbf{Prueba} & \textbf{Resultado} \\
+\midrule
+Lanzar con ventana y escena como argumento & El cliente responde; lee \texttt{/pendulum\_joint} y \cod{/graph}; inicia y detiene la simulación. Primer puerto en escucha a los 4.5~s \\
+Lanzar con \cod{-h} y escena & Responde igual; primeros puertos a los 0.8~s; la simulación corre. Solo se vio una ventana de terminal, ninguna gráfica \\
+Cierre con ventana (\cod{CloseMainWindow}) & Cerró solo en 9.4~s; 0 procesos restantes \\
+Cierre sin ventana (\cod{-h}) & \textbf{No cierra solo}; hubo que forzarlo a los 15~s (0 procesos restantes después) \\
+Escena inexistente & CoppeliaSim arranca igual con escena vacía y el servidor responde; el fallo aparece al pedir \texttt{/pendulum\_joint}: error 1189, \cod{object does not exist, or alias/path is ill formatted}. No hay error en el lanzamiento \\
+Ciclo completo (CoppeliaSim + \textit{DSLite} + \textit{middleware}) & \cod{OK}, 2000 líneas válidas, 0 ignoradas, 20.00~s por conteo y 20.08~s de reloj; búfer serie máximo 44 bytes; 638 actualizaciones de la escena (costo medio 5.0~ms, máximo 26.1~ms); cierre sin procesos restantes \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Hallazgos y decisiones}
+
+\begin{enumerate}
+    \item \textbf{El servidor ZeroMQ no se anuncia.} Respondió a la primera llamada del cliente en las tres pruebas, pero el sondeo de puertos se detuvo en el primer puerto que apareció y no midió con precisión cuándo queda listo; solo hay una cota superior (unos 6~s con ventana y 2~s sin ventana). \textbf{Decisión:} esperar reintentando la conexión con un tiempo máximo, no con una pausa fija. Una pausa fija es frágil en teoría (el tiempo de arranque depende de la carga de la máquina) y en la práctica (se medían 0.8 y 4.5~s según el modo).
+    \item \textbf{Con escena inexistente no hay aviso.} La documentación no promete lo contrario, y la prueba confirma que el programa se abre vacío. \textbf{Decisión:} comprobar que el archivo existe antes de lanzar y verificar \texttt{/pendulum\_joint} y \cod{/graph} al conectar. Así el error aparece en el momento y en el lugar donde puede explicarse.
+    \item \textbf{El modo \cod{-h} no se cierra con la orden usual.} Es coherente con que sea un modo ``emulado'': el proceso sigue vivo aunque no tenga ventana principal que cerrar. \textbf{Decisión:} en ese modo el cierre se hará terminando el proceso. No se probó el modo \cod{-H} (\textit{headless} verdadero) porque la documentación indica que sigue requiriendo servidor de pantalla.
+    \item \textbf{La simulación corre mucho más rápido que el tiempo real.} Tras 3~s reales, el tiempo simulado fue de 53.55~s con ventana y 519.05~s sin ella (unas 18 y 173 veces más rápido). \textit{Inferido:} es la ejecución sin sincronía con el reloj de pared. No afecta al visor, que solo refleja la posición recibida, pero el eje de tiempo de \cod{/graph} es el simulado; los datos de la tesis salen del puerto serie, no de la gráfica.
+    \item \textbf{Pendiente de F6:} el tiempo exacto de disponibilidad del servidor y los procesos huérfanos ante un cierre abrupto de la aplicación que los lanza (se prueba con la GUI). No se registró si el péndulo de la escena se movió durante el ciclo completo.
+\end{enumerate}
+
+%==============================================================================
+\section{Hallazgo transversal: desviación de posición y autocalibración del ADC}
+\label{sec:offset}
+
+Este problema no formaba parte de la lista de pruebas, pero apareció al hacer F6 y condicionó la confianza en todo lo demás: si el sistema medido se desvía sin explicación, no se puede afirmar que la cadena automatizada reproduce los resultados anteriores.
+
+\subsection{Cómo apareció}
+
+Al comparar la respuesta del DSP con la simulación de MATLAB con una corrida del 19 de noviembre, la media de la posición en régimen permanente fue de $+2.695\mrad$ (desviación estándar $0.460\mrad$), frente a $-0.026\mrad$ de MATLAB. En la corrida de referencia posterior a la calibración se había reportado $+0.018\mrad$. La pregunta era a qué se debía y cómo evitarlo.
+
+\subsection{Fundamento teórico: por qué un offset de medición se convierte en error de posición}
+
+En el lazo HIL el DSP emula la planta y escribe el ángulo $\theta$ como código de DAC; un puente lleva ese voltaje al ADC, que lo lee de vuelta. El controlador ve la lectura del ADC, no la variable interna $\theta$. Con $\theta_{\min}=-\pi/2$ y rango $\pi$, cada cuenta equivale a
+\begin{equation}
+\mathrm{LSB}=\frac{\pi}{4095}=0.7672\mrad,
+\label{eq:lsb}
+\end{equation}
+y el firmware calcula el ángulo medido como
+\begin{equation}
+\theta_{\mathrm{med}}=\theta_{\min}+(\mathrm{adc}-B)\,\mathrm{LSB},
+\label{eq:med}
+\end{equation}
+donde $B$ es una constante de calibración. Si el lazo DAC$\rightarrow$ADC añade un desplazamiento $\mathrm{off}$ (en cuentas), entonces $\mathrm{adc}=\mathrm{dac}+\mathrm{off}$ con $\mathrm{dac}=(\theta-\theta_{\min})/\mathrm{LSB}$.
+
+El controlador tiene acción integral: en régimen permanente lleva a cero el \textit{error medido}, es decir, $\theta_{\mathrm{med}}\to 0$ \cite{astrom}. Imponiendo $\theta_{\mathrm{med}}=0$ en~(\ref{eq:med}) y recordando que $-\theta_{\min}/\mathrm{LSB}=2047.5$, resulta $\mathrm{adc}=B+2047.5$, y por tanto el ángulo \textit{real} de la planta emulada queda en
+\begin{equation}
+\theta_{\mathrm{real}}=(B-\mathrm{off})\,\mathrm{LSB}.
+\label{eq:real}
+\end{equation}
+La integral no corrige este error porque no lo ve: regula la medida, no la planta. Cada cuenta de diferencia entre $B$ y el offset real equivale a $0.77\mrad$ de error permanente. Esto explica por qué un corrimiento de apenas una cuenta en el lazo físico produce una desviación visible, y por qué no tiene relación con la sintonía del controlador. Además, aun con $B$ perfecto, la cuantización del DAC y del ADC deja un residuo de hasta media cuenta ($\pm 0.38\mrad$); para un cuantizador uniforme el error es aproximadamente uniforme en $\pm \mathrm{LSB}/2$ \cite{oppenheim}. Ese residuo es el piso razonable que se adoptó como criterio ($\pm 0.4\mrad$).
+
+La ecuación~(\ref{eq:real}) también da un método de diagnóstico. El firmware calcula \cod{b_sugerido}, la estimación de $B$ que haría $\theta_{\mathrm{real}}$ cero. Como \cod{b_sugerido} $=B-\theta_{\mathrm{mean}}/\mathrm{LSB}$, la suma \cod{b_sugerido} $+\theta_{\mathrm{mean}}/\mathrm{LSB}$ debe devolver el valor de $B$ con el que se midió. Esa propiedad se usó más adelante para detectar un error de rotulado en datos antiguos.
+
+\subsection{Investigación: hipótesis descartadas}
+
+El corrimiento se estudió descartando causas, una por una, con pruebas que aislaran una sola variable.
+
+\begin{table}[!htbp]
+\centering
+\caption{Hipótesis para la desviación y su resultado.}
+\label{tab:hipotesis}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{4.8cm}Y}
+\toprule
+\textbf{Hipótesis} & \textbf{Prueba} & \textbf{Resultado} \\
+\midrule
+El binario compilado por línea de comandos difiere del del IDE & Prueba A/B: tres rondas alternando ambos binarios en la misma sesión (20~s por corrida, media para $t\ge 2$~s) & Línea de comandos: 0.874, 0.885, 0.933~mrad. IDE: 0.917, 0.928, 0.874~mrad. Diferencia $\approx 0.01\mrad$, menor que la dispersión entre corridas ($\approx 0.05\mrad$). \textbf{Descartada} \\
+\addlinespace
+La carga con \textit{DSLite} difiere de la carga con CCS & Tres corridas cargando desde CCS y dos desde \textit{DSLite}, el mismo día & CCS: 0.956, 0.851, 0.887~mrad (media 0.898). \textit{DSLite}: 0.867, 0.838~mrad (media 0.853). Diferencia $\approx 0.05\mrad$. \textbf{Descartada} \\
+\addlinespace
+CCS carga recortes de calibración del ADC que \textit{DSLite} no carga & Lectura del GEL del dispositivo & Su \cod{OnReset} libera la CPU2, deshabilita el \textit{watchdog}, configura DCSM y copia la configuración del dispositivo desde la OTP; \textbf{no ejecuta calibración del ADC}. Como CCS y \textit{DSLite} usan el mismo GEL, no puede explicar una diferencia entre ellos. \textbf{Descartada como causa de esa diferencia} \\
+\addlinespace
+Cambió el estado físico del lazo o su entorno entre el 9 y el 17 de noviembre & Línea de tiempo de todas las corridas guardadas (Tabla~\ref{tab:tiempo}) y lecturas de \textit{Watch} & Es lo que queda. \textbf{Causa no determinada.} Se preguntó si se movió el puente, el cable USB o la tarjeta; sin respuesta hasta ahora \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[!htbp]
+\centering
+\caption{Media de la posición en régimen permanente ($t\ge 2$~s, 1800 muestras) de todas las corridas guardadas.}
+\label{tab:tiempo}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.4cm}Y}
+\toprule
+\textbf{Fecha} & \textbf{Carga} & \textbf{Media (mrad)} \\
+\midrule
+1 de noviembre & CCS & 0.653, 0.090, 0.018 \\
+5 de noviembre & CCS & $-0.202$, $-0.325$ \\
+9 de noviembre & CCS & 0.138, $-0.014$ \\
+17 de noviembre & \textit{DSLite} & 1.213, 0.941, 1.071, 0.867, 0.871 \\
+19 de noviembre & \textit{DSLite} & \textbf{2.696} (con CoppeliaSim); después 0.874, 0.917, 0.885, 0.928, 0.933, 0.874 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Las corridas anteriores al 17 de noviembre ($n=7$) promedian $\approx 0.05\mrad$; las posteriores con \textit{DSLite} ($n=11$, sin el valor de 2.696) promedian $\approx 0.94\mrad$, unas 1.2 cuentas. Como ni el binario ni el modo de carga lo explican, el cambio es del estado del hardware o su entorno, confundido en el tiempo con el cambio de herramienta. El valor aislado de $2.696\mrad$ \textbf{no se reprodujo} en ninguna de las 6 corridas posteriores y su causa tampoco está determinada.
+
+Las lecturas de la vista \textit{Watch} (Tabla~\ref{tab:watch}) muestran además que el offset no es constante ni siquiera dentro de una sesión: \cod{b_sugerido} bajó de 5.03 a 4.62 (unas 0.4 cuentas) en el orden en que se tomaron las cinco capturas, y frente al 1 de noviembre (5.9 a 6.0) es 1.0 a 1.4 cuentas menor.
+
+\begin{table}[!htbp]
+\centering
+\caption{Lecturas de \textit{Watch} del 19 de noviembre (con $B=6.1$; 200~MHz; 0 \textit{overruns} y 0 \textit{timeouts} en todas).}
+\label{tab:watch}
+{\small\setlength{\tabcolsep}{4pt}\begin{tabular}{cp{4.4cm}cccc}
+\toprule
+\textbf{\#} & \textbf{Origen} & \textbf{Ciclos ISR} & \textbf{$\theta_{\mathrm{med}}$ (mrad)} & \textbf{offset (LSB)} & \textbf{$B$ sugerido} \\
+\midrule
+1 & CCS, proyecto original & 1578 & 0.820 & 4.650 & 5.031 \\
+2 & CCS, proyecto original & 1578 & 0.909 & 4.671 & 4.915 \\
+3 & CCS, proyecto original & 1377 & 0.908 & 4.677 & 4.917 \\
+4 & Tras reconectar & 1578 & 1.080 & 4.333 & 4.692 \\
+5 & CCS, binario compilado por línea de comandos & 1578 & 1.133 & 4.325 & 4.623 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\subsection{Corrección de un rotulado en documentación anterior}
+
+Con la propiedad descrita después de la ecuación~(\ref{eq:real}), se revisaron las capturas del 1 de noviembre: \cod{b_sugerido} $+\theta_{\mathrm{mean}}/\mathrm{LSB}$ da 6.600 en las cuatro, mientras que las capturas del 19 de noviembre dan exactamente 6.100 con la misma cuenta. Es decir, aquellas capturas se tomaron con $B=6.6$, no con $B=6.1$ como indicaban la bitácora (Prueba~12) y la tabla de calibración de \texttt{reporte\_avances.tex}. Con el offset de entonces ($\approx 5.98$ cuentas), la ecuación~(\ref{eq:real}) predice que $B=6.1$ habría dado $\approx 0.09\mrad$, lo que concuerda con las corridas de ese día con datos guardados (0.018 y 0.090~mrad). La corrección está identificada y \textbf{pendiente de aplicar} antes de la entrega del 23 de noviembre; la decide el estudiante.
+
+\subsection{Solución adoptada: autocalibración del offset al arrancar}
+
+\textbf{Decisión.} Dado que el offset cambia entre sesiones y dentro de una sesión por una causa no identificada, en lugar de buscar un $B$ fijo mejor se decidió medir el offset al arrancar, para que el sistema deje de depender de él y sea más robusto.
+
+\textbf{Fundamento.} De la ecuación~(\ref{eq:med}), el controlador ve $\theta_{\mathrm{med}}=0$ cuando $\mathrm{adc}=B+2047.5$. Si se fija el DAC en el código 2048 (equilibrio, $\theta\approx 0$) y se promedian muchas lecturas del ADC, la media vale $2048+\mathrm{off}$, y por tanto $B=\mathrm{media}-2047.5$. Con esa elección, la ecuación~(\ref{eq:real}) predice un error residual igual a la mitad de una cuenta ($0.38\mrad$) por la cuantización. Promediar 5000 lecturas reduce el ruido aleatorio de cada lectura (de orden una cuenta) por un factor de $\sqrt{5000}\approx 71$.
+
+\textbf{Implementación.} La función \cod{AutoCalibrar()} se ejecuta al recibir la señal \cod{S}, con el temporizador detenido, de modo que la interrupción no compite por el ADC ni el DAC. Fija el DAC en 2048, espera 2~ms para el asentamiento, promedia 5000 lecturas y obtiene $B$. Si el resultado no es confiable, conserva el valor nominal de respaldo (6.1) y deja la bandera \texttt{cal\_ok} en 0, de modo que el fallo sea visible y no silencioso. La interrupción y el cálculo de \texttt{b\_sugerido} usan la variable \texttt{adc\_cal\_b} en lugar de la constante. Con \texttt{USE\_AUTOCAL}=0 se recupera el comportamiento anterior.
+
+\textbf{Primera versión: rechazada (medido).} Tres corridas con la tarjeta dieron medias de $+1.384$, $+1.160$ y $+1.034\mrad$, peores que el $\approx 0.9\mrad$ con $B$ fijo. La lectura de \textit{Watch} mostró la causa: \texttt{cal\_ok}=0 y \texttt{adc\_cal\_b}=6.1 (se usó el respaldo), con \texttt{b\_auto}=6.219, \texttt{cal\_min}=2051 y \texttt{cal\_max}=2176. El criterio de aceptación exigía que $(\max-\min)\le 24$ cuentas; una o pocas lecturas atípicas aisladas lo violaron (dispersión 125), aunque la \textit{media} era correcta (\texttt{b\_sugerido}=6.047, a 0.17 cuentas de \texttt{b\_auto}). El criterio era demasiado sensible: usaba un estadístico, el rango, que depende de un solo valor extremo, para validar otro, la media, que casi no depende de él. Una lectura atípica de $+122$ cuentas respecto al valor esperado ($2176-2054.1$), entre 5000, mueve la media solo $122/5000\approx 0.024$ cuentas.
+
+\textbf{Segunda versión (medido).} Se descartan las lecturas a más de 12 cuentas del valor esperado ($2048+6.1$), la media se calcula con las válidas y la medición se acepta si $|B-6.1|\le 10$ y se descartaron como máximo 250 de 5000 lecturas (5\,\%). Una variable nueva, \texttt{cal\_out}, cuenta las descartadas. Así, un puñado de lecturas atípicas no invalida una medición buena, pero una entrada ruidosa o desconectada (muchas lecturas descartadas) sí se rechaza. Resultado de \textit{Watch}: \texttt{cal\_ok}=1, \texttt{cal\_out}=1, \texttt{b\_auto}=\texttt{adc\_cal\_b}=5.512, \texttt{b\_sugerido}=5.566 (diferencia de 0.054 cuentas), \texttt{isr\_max\_cycles}=1385, 0 \textit{overruns}. El offset medido pasó de 6.22 a 5.51 entre las dos capturas y la calibración lo siguió.
+
+\textbf{Validación en lazo completo (medido).} Dos tandas de 6 corridas seguidas con \textit{DSLite} (20~s por corrida, sin recompilar):
+
+\begin{table}[!htbp]
+\centering
+\caption{Autocalibración v2: media de posición ($t\ge 2$~s) de 12 corridas, en mrad.}
+\label{tab:autocal}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Tanda} & \textbf{1} & \textbf{2} & \textbf{3} & \textbf{4} & \textbf{5} & \textbf{6} \\
+\midrule
+17:40 & 0.039 & 0.054 & 0.174 & 0.059 & 0.336 & 0.030 \\
+17:49 (tras 8 min desconectada) & $-0.018$ & 0.019 & 0.041 & 0.079 & 0.143 & 0.023 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Las 12 corridas quedaron dentro de $\pm 0.4\mrad$ (máximo $0.336\mrad$), frente a $\approx 0.9\mrad$ con $B$ fijo. La segunda tanda se hizo tras 8~minutos con la tarjeta desconectada, es decir, en un arranque nuevo y sin enfriamiento largo.
+
+\textbf{Qué falta para darla por validada.} Una confirmación con la tarjeta fría (a la mañana siguiente, con el mismo bloque de 6 corridas). Y una decisión del director: la autocalibración cambia el \cod{main} probado, y la regla del proyecto es que la tesis solo contiene lo implementado y probado, así que su inclusión se decide aparte. Debe quedar claro que la autocalibración \textbf{mitiga} el síntoma y elimina la dependencia de un $B$ fijo; no explica por qué cambió el offset. Esa causa raíz sigue abierta.
+
+%==============================================================================
+\section{F5: comandos por UART con la interrupción activa (preparada)}
+\label{sec:f5}
+
+\textbf{Objetivo.} Comprobar que el firmware puede recibir comandos mientras la interrupción de control corre, sin degradar su tiempo ni perder datos. Es la prueba que más condiciona la GUI, porque decide si se puede leer y escribir mientras el lazo corre, y además permite sustituir a \cod{DSLite memory} para el diagnóstico (Sec.~\ref{sec:hallazgo_memory}).
+
+\textbf{Diseño.} La interrupción no se modifica. El bucle principal llama a una función \cod{PollRx()} que lee el UART sin bloquear y solo levanta banderas; la respuesta se emite entre tramas de telemetría. \cod{PollRx()} se llama también dentro de las esperas de transmisión, porque la tarjeta emite cada trama byte a byte y el receptor del SCI guarda un solo byte: sin sondeo durante esas esperas, los bytes recibidos mientras se transmite una trama se perderían. El comando \cod{D} responde con una línea que empieza con la letra \cod{D} y contiene los contadores de diagnóstico (ciclos máximos, \textit{overruns}, \textit{timeouts}, errores de recepción, tramas, estado de la calibración, $B$ y contadores de comandos); el \textit{middleware} actual la descarta como línea inválida sin otro efecto. Las lecturas se apoyan en las banderas del SCI (\cod{RXRDY}, \cod{TXRDY}, \cod{RXERROR}), cuyo detalle de registros se consultó solo en el índice del manual de referencia \cite{trm}, no en su texto.
+
+\textbf{Prueba.} El \textit{script} \texttt{f5\_prueba.py} corre cuatro fases de 10~s: base sin comandos, \cod{D} a 10~Hz (latencia), \cod{D} a 100~Hz (una por trama) y bytes basura a 2~kHz más una \cod{D} final. Los criterios para aprobar son: tasa de $100\pm 2$ tramas/s en cada fase, 0 líneas inválidas, respuestas completas, latencia mediana menor de 10~ms y máxima menor de 25~ms, ningún comando ni byte perdido (comparando los contadores del DSP con lo enviado), \texttt{isr\_max\_cycles} menor de 2000 y 0 \textit{overruns}, \textit{timeouts} y errores de recepción. El \textit{script} usa \texttt{in\_waiting} y lecturas con tiempo de espera de \cod{pySerial} \cite{pyserial} para no bloquearse.
+
+\textbf{Estado.} Solo se verificó la lógica de evaluación contra un DSP simulado; en ese ensayo se corrigió un error propio del \textit{script} (el tiempo de la espera final no se sumaba a la última fase). \textbf{No se ha compilado ni corrido en la tarjeta.} Riesgo a vigilar: ante un error de recepción, el firmware reinicia el SCI, lo que podría truncar una trama en transmisión; por eso se exige cero errores de recepción.
+
+%==============================================================================
+\section{Resumen de decisiones para la GUI}
+\label{sec:decisiones}
+
+\begin{table}[!htbp]
+\centering
+\caption{De cada hallazgo a su consecuencia de diseño.}
+\label{tab:decisiones}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.0cm}Y>{\raggedright\arraybackslash}p{3.0cm}}
+\toprule
+\textbf{Hallazgo} & \textbf{Decisión de diseño} & \textbf{Evidencia} \\
+\midrule
+Argumentos con guion y punto fallan sin comillas en PowerShell~5.1 & La GUI lanza procesos con una lista de argumentos (sin intérprete de comandos) & Medido; causa inferida \\
+Éxito de compilación: código 0; error: código 1 y línea \cod{Error: archivo [line N]} & Detectar por código de salida y analizar la salida; prueba automática de regresión & Medido; no documentado \\
+\cod{-workspace} no es el espacio de trabajo real & Fijar un espacio de trabajo propio y estable (\cod{-data} con \cod{ccs-serverc}) & Medido \\
+Cargar con \cod{DSLite}: código 0 en 10 de 10 intentos & Usar \cod{load} y su código de salida como señal de éxito & Medido y documentado \\
+\cod{DSLite memory} reinicia el programa (GEL) & No usarlo; diagnóstico por UART (F5) & Leído y documentado; medido \\
+Sin tarjeta y CCS abierto dan el mismo error $-151$ & Revisar procesos de CCS antes de culpar al cable & Medido \\
+Los fallos de conexión tardan 1--3~s & No esperar el tiempo máximo para avisar & Medido \\
+El servidor ZeroMQ no se anuncia & Reintentar la conexión con tiempo máximo & Medido (cota superior) \\
+Escena inexistente: sin error de lanzamiento & Verificar que el archivo existe y los objetos al conectar & Medido \\
+Modo \cod{-h} no cierra solo & Cerrar terminando el proceso & Medido \\
+El offset del lazo DAC$\rightarrow$ADC cambia entre sesiones & Autocalibración al arrancar con bandera \texttt{cal\_ok} visible & Medido; causa raíz abierta \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%==============================================================================
+\section{Estado, limitaciones y trabajo siguiente}
+\label{sec:estado}
+
+\subsection{Limitaciones de este trabajo}
+
+\begin{itemize}
+    \item Varias explicaciones son \textit{inferidas} y están marcadas como tales: la causa de la división de argumentos en PowerShell, la RAM en cero tras la conexión de \textit{DSLite}, la velocidad de la simulación y la diferencia de tamaño del \cod{.out}.
+    \item Las referencias de TI y CoppeliaSim se consultaron en sus páginas de documentación. El manual de referencia técnico del F2837xD \cite{trm} y la hoja de datos solo se pudieron consultar por su estructura (índice de secciones): el índice confirma que existen secciones de calibración del ADC (offset cero y rutinas en memoria OTP), de disparo de conversiones por software y del SCI, pero no se citan valores numéricos de esos documentos. Queda como tarea revisar esas secciones y comprobar si la rutina de recorte de fábrica del ADC se ejecuta en el arranque del firmware.
+    \item Las pruebas se hicieron en un solo equipo, con una sola tarjeta y una sola versión de cada herramienta.
+\end{itemize}
+
+\subsection{Pendientes}
+
+\begin{enumerate}
+    \item F5: aplicar el firmware y el \textit{script} en la tarjeta, compilar y correr las cuatro fases.
+    \item F3 (\textit{flash} frente a RAM) y F4 (CPU2 por línea de comandos).
+    \item Autocalibración: confirmar con la tarjeta fría y decidir con el director si entra al firmware de la tesis.
+    \item Corregir el rotulado de $B$ (6.6, no 6.1) en la tabla de calibración de \texttt{reporte\_\allowbreak avances.tex} y en la Prueba~12 de la bitácora, antes del 23 de noviembre.
+    \item Determinar la causa raíz del corrimiento del offset (cambios físicos entre el 9 y el 17 de noviembre, el valor aislado de $2.696\mrad$).
+    \item F6: medir el tiempo exacto de disponibilidad del servidor y probar los procesos huérfanos con la GUI.
+    \item Aplicar a la propuesta de la GUI los ajustes que se desprenden de la Tabla~\ref{tab:decisiones}.
+\end{enumerate}
+
+%==============================================================================
+\section{Conclusiones}
+
+Las tres pruebas ejecutadas (F1, F2 y F6) muestran que la cadena de compilar, cargar, ejecutar y visualizar puede automatizarse con las herramientas ya instaladas y sin abrir el entorno gráfico: la compilación reproduce el programa del IDE (280 de 280 símbolos), la carga con \textit{DSLite} funcionó 10 de 10 veces, y CoppeliaSim se lanza y se controla por ZeroMQ. El mayor obstáculo no estaba en las herramientas sino en la sintaxis del intérprete desde el que se probaban, un problema que la GUI evita al no usarlo.
+
+Las pruebas también mostraron límites que cambian el diseño: \cod{DSLite memory} no sirve para inspeccionar el programa por la rutina de conexión del GEL, ``sin tarjeta'' y ``sonda ocupada'' no se distinguen por el mensaje, el servidor de CoppeliaSim no avisa cuándo está listo y el modo sin ventana no se cierra solo. En cada caso la decisión se apoya en una observación medida y, cuando la hay, en la documentación del fabricante.
+
+El hallazgo más instructivo fue la desviación de posición: una diferencia de una sola cuenta del ADC produce $0.77\mrad$ de error permanente porque el integrador regula lo que mide y no la planta. La primera solución falló por usar un criterio de aceptación sensible a un solo valor extremo; la segunda, con descarte de lecturas atípicas, dejó 12 corridas consecutivas dentro de $\pm 0.4\mrad$. La causa raíz del corrimiento sigue sin determinarse, y por eso se presenta como mitigación y no como explicación.
+
+%==============================================================================
+\begin{thebibliography}{99}
+\bibitem{ccs_cli} Texas Instruments, \textit{Code Composer Studio 20.5.1 User's Guide: Creating and Building Projects from Command Line}. \url{https://software-dl.ti.com/ccs/esd/documents/users_guide_ccs_20.5.1/ccs_project-command-line.html}
+\bibitem{ccs_opts} Texas Instruments, \textit{Code Composer Studio 20.5.1 User's Guide: List of buildProject Options}. \url{https://software-dl.ti.com/ccs/esd/documents/users_guide_ccs_20.5.1/ccs_project-command-line-buildProject-options.html}
+\bibitem{uniflash} Texas Instruments, \textit{UniFlash Quick Start Guide} (sección de línea de comandos: \textit{DSLite}). \url{https://software-dl.ti.com/ccs/esd/uniflash/docs/latest_qsguide.html}
+\bibitem{gel} Texas Instruments, \textit{Code Composer Studio User's Guide: GEL function OnTargetConnect()}. \url{https://software-dl.ti.com/ccs/esd/documents/users_guide/gel/OnTargetConnect.html}
+\bibitem{trm} Texas Instruments, \textit{TMS320F2837xD Dual-Core Real-Time Microcontrollers Technical Reference Manual}, SPRUHM8 (consultado solo el índice de capítulos y secciones). \url{https://www.ti.com/document-viewer/lit/html/SPRUHM8}
+\bibitem{coppelia_cmd} Coppelia Robotics, \textit{CoppeliaSim User Manual: Command line options}. \url{https://manual.coppeliarobotics.com/en/commandLine.htm}
+\bibitem{coppelia_zmq} Coppelia Robotics, \textit{CoppeliaSim User Manual: ZeroMQ remote API overview}. \url{https://manual.coppeliarobotics.com/en/zmqRemoteApiOverview.htm}
+\bibitem{ps_parsing} Microsoft, \texttt{about\_Parsing} (documentación de PowerShell). \url{https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parsing}
+\bibitem{ps_issue} PowerShell, \textit{Issue \#6292: argumentos con guion y dos puntos}. \url{https://www.github.com/PowerShell/PowerShell/issues/6292}
+\bibitem{maven} Microsoft, \textit{PowerShell and Maven} (blog \textit{Silver Lining}, archivo). \url{https://learn.microsoft.com/en-us/archive/blogs/silverlining/powershell-and-maven}
+\bibitem{pysub} Python Software Foundation, \textit{subprocess: Subprocess management}, Python 3.11. \url{https://docs.python.org/3.11/library/subprocess.html}
+\bibitem{pyserial} C. Liechti, \textit{pySerial API}. \url{https://pyserial.readthedocs.io/en/stable/pyserial_api.html}
+\bibitem{astrom} K. J. Åström y R. M. Murray, \textit{Feedback Systems: An Introduction for Scientists and Engineers}, 2.ª ed., Princeton University Press, 2021 (acción integral en el control PID).
+\bibitem{oppenheim} A. V. Oppenheim y R. W. Schafer, \textit{Discrete-Time Signal Processing}, 3.ª ed., Pearson, 2010 (error de cuantización uniforme).
+\end{thebibliography}
+
+%==============================================================================
+\appendix
+\section{Comandos utilizados}
+\label{ap:comandos}
+
+Los comandos están escritos sin acentos y con las opciones entre comillas o en arreglo, por la razón de la Sección~\ref{sec:hallazgo_ps}. \texttt{\$CCS}, \texttt{\$W}, \texttt{\$DSL}, \texttt{\$CCXML}, \texttt{\$OUT}, \texttt{\$MW} y \texttt{\$AN} son variables de la sesión con las rutas de CCS, de la carpeta de pruebas, de \textit{DSLite}, del \cod{.ccxml}, del \cod{.out}, del \textit{middleware} y de la carpeta de análisis.
+
+\paragraph{Compilar (F1).}
+\begin{lstlisting}
+$a = @("-ccs.projects","Proyecto_Pendulo_CPU1",
+       "-ccs.configuration","CPU1_RAM_DEBUG",
+       "-ccs.buildType","full","-ccs.listProblems")
+& "$CCS\ccs\eclipse\ccs-serverc.exe" -nosplash -data "$W\ws_data" `
+  -application com.ti.ccs.apps.buildProject @a
+"exit=$LASTEXITCODE"
+\end{lstlisting}
+
+\paragraph{Cargar y probar (F2).}
+\begin{lstlisting}
+& $DSL load -c $CCXML -n 0 -t 60 $OUT
+Start-Sleep 2
+Push-Location $MW; python .\hil_coppelia.py --sin-coppelia; Pop-Location
+\end{lstlisting}
+
+\paragraph{Media en régimen permanente de las corridas más recientes.}
+\begin{lstlisting}
+Get-ChildItem "$AN\datos_sin_perturbacion_2*.csv" | Sort-Object Name |
+  Select-Object -Last 6 | ForEach-Object {
+    $m = (python "$W\media_ss.py" $_.FullName) -split ' '
+    [pscustomobject]@{Archivo=$_.Name; Media_mrad=$m[0]; Desv_mrad=$m[1]}
+  } | Format-Table -AutoSize
+\end{lstlisting}
+
+\section{Evidencia en el repositorio del proyecto}
+
+Los resultados detallados, con fechas y observaciones, están en \url{docs/gui/Resultados_F1_2026-11-17.md}, \url{Resultados_F2_2026-11-17.md} y \url{Resultados_F6_2026-11-19.md}, y en las adendas del 17 y 19 de noviembre de \url{docs/bitacora_pruebas.md}. El firmware con autocalibración está en \cod{firmware/fuentes/autocal/} y el de F5 en \cod{firmware/fuentes/f5/}.
+
+\end{document}

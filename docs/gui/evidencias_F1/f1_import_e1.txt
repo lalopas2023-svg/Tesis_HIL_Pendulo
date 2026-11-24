@@ -1,0 +1,6 @@
+
+# --------------------------------------------------------------------------------
+# Importing project from 'C:/Users/epasc/Documents/Eddy/Maestria/Tesis/Tesis_HIL/firmware/_factibilidad/proyecto/Proyecto_Pendulo_CPU1'...
+
+
+Done

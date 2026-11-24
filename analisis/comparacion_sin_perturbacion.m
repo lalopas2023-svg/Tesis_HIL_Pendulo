@@ -1,6 +1,6 @@
 % ========================================================
 % Comparación DSP vs MATLAB - Sin perturbación   (v2)
-% Compatible con control_hil_v3.c y hil_coppelia_v2.py
+% Compatible con control_hil_sin_perturbacion.c y hil_coppelia.py
 %
 % CAMBIOS respecto a tu versión (cada uno corrige algo que falseaba la comparación):
 %  [1] Condiciones iniciales = las del FIRMWARE (theta=0.1, theta_dot=0, prev=0.1).

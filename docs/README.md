@@ -1,10 +1,11 @@
 # docs/
 
-- **`bitacora_pruebas.md`** — bitácora cronológica de pruebas (sesiones 2026-10-04, 10-08 y 10-31/11-01).
-- **`Modelo_péndulo_invertido_.pdf`**, **`Reporte_eliminación_de_ruido.pdf`** — documentos de modelo y de ruido.
-- **`comparacion_dsp_matlab_v2*.png`**, **`Análisis Modular del Péndulo.png`** — figuras de sesiones anteriores.
-- **`capturas/`** — evidencias; `capturas/2026-11-01/` contiene las capturas de CCS (Watch), sniffer, CoppeliaSim y
-  MATLAB de la sesión del 31-oct/1-nov, numeradas en orden cronológico.
-- **`reporte/reporte_avances.tex`** — reporte en LaTeX (Overleaf) actualizado al 2026-11-01. Usa imágenes de `capturas/`
-  (incluida `capturas/2026-11-01/`); las figuras `analisis_multivariable_final.png` y `comparacion_con_offset.png` del
-  reporte original deben estar en `capturas/` del proyecto de Overleaf.
+| Ruta | Contenido |
+|---|---|
+| [`bitacora_pruebas.md`](bitacora_pruebas.md) | Bitácora cronológica de pruebas, de la sesión del 2026-10-04 a las adendas del 2026-11-24: qué se probó, con qué resultado, qué se corrigió y qué sigue abierto. Termina con el registro de la depuración del repositorio. |
+| [`reporte/`](reporte/) | Reportes individuales: `reporte_avances.tex` y su PDF `reporte_avances_2026-11-01.pdf` (diagnóstico y validación del modelo sin perturbación, 2026-11-01), `reporte_teoria_control.tex` (fundamento teórico de control, implementación y validación contra MATLAB) y, de octubre, `Modelo_pendulo_invertido_2026-10.pdf` y `Reporte_eliminacion_de_ruido_2026-10.pdf`. |
+| [`capturas/2026-11-01/`](capturas/2026-11-01/) | Capturas de la sesión del 31-oct/1-nov, numeradas en orden cronológico: *Watch* de CCS, sniffer serial, diálogo de símbolos, CoppeliaSim y figuras de MATLAB. `reporte_avances.tex` las usa. |
+| [`gui/`](gui/README.md) | Propuesta de interfaz gráfica y generador de configuración, con su guía y resultados de las pruebas de factibilidad (F1 a F6) y el reporte de prácticas que las resume. |
+
+Los PDF de octubre y el de `reporte_avances` se compilaron aparte; de `reporte_teoria_control.tex` solo se versiona la fuente. `reporte_avances.tex` busca sus
+imágenes en `capturas/`.
